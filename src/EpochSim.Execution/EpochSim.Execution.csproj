@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\EpochSim.Kernel\EpochSim.Kernel.csproj" />
+    <ProjectReference Include="..\EpochSim.Observability\EpochSim.Observability.csproj" />
+    <ProjectReference Include="..\EpochSim.Serialization\EpochSim.Serialization.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

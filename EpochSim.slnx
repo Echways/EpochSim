@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EpochSim.Cli/EpochSim.Cli.csproj" />
+    <Project Path="src/EpochSim.Execution/EpochSim.Execution.csproj" />
+    <Project Path="src/EpochSim.Kernel/EpochSim.Kernel.csproj" />
+    <Project Path="src/EpochSim.Observability/EpochSim.Observability.csproj" />
+    <Project Path="src/EpochSim.Samples/EpochSim.Samples.csproj" />
+    <Project Path="src/EpochSim.Serialization/EpochSim.Serialization.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj" />
+    <Project Path="tests/EpochSim.Execution.Tests/EpochSim.Execution.Tests.csproj" />
+    <Project Path="tests/EpochSim.Kernel.Tests/EpochSim.Kernel.Tests.csproj" />
+  </Folder>
+</Solution>
