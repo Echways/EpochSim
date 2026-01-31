@@ -8,6 +8,7 @@ using EpochSim.Kernel.Validation;
 using EpochSim.Observability.Tracing;
 using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
+using EpochSim.Serialization.Snapshots;
 using EpochSim.Serialization.State;
 
 var cmd = args.Length > 0 ? args[0] : "run";
@@ -105,7 +106,7 @@ else if (cmd == "validate-run")
 }
 else if (cmd == "fast-replay")
 {
-    var runId = ResolveRunId(root, runArg);
+    var runId = ResolveRunIdWithEvents(root, runArg);
     var paths = new RunPaths(root, runId);
 
     var engine = new SimulationEngine<WorldState>();
@@ -144,7 +145,7 @@ else if (cmd == "list-runs")
             .ToArray();
 
         Console.WriteLine($"Root={root}");
-        Console.WriteLine("RunId | HasMeta | HasEvents | Snapshots | Dumps");
+        Console.WriteLine("RunId | HasMeta | HasEvents | Snapshots | Dumps | MinRepros");
 
         foreach (var d in dirs)
         {
@@ -157,8 +158,11 @@ else if (cmd == "list-runs")
             var dumps = Directory.Exists(Path.Combine(d.FullName, "dumps"))
                 ? Directory.EnumerateFiles(Path.Combine(d.FullName, "dumps"), "violation-meta-*.txt").Count()
                 : 0;
+            var minrepros = Directory.Exists(Path.Combine(d.FullName, "minrepro"))
+                ? Directory.GetDirectories(Path.Combine(d.FullName, "minrepro")).Length
+                : 0;
 
-            Console.WriteLine($"{runId} | {(meta ? "Y" : "N")} | {(events ? "Y" : "N")} | {snaps} | {dumps}");
+            Console.WriteLine($"{runId} | {(meta ? "Y" : "N")} | {(events ? "Y" : "N")} | {snaps} | {dumps} | {minrepros}");
         }
     }
 }
@@ -203,10 +207,7 @@ else if (cmd == "inspect-run")
             Console.WriteLine($"Snapshots={snaps.Length}");
             if (snaps.Length > 0)
             {
-                var last = snaps
-                    .Select(p => new FileInfo(p))
-                    .OrderByDescending(f => f.Name)
-                    .First();
+                var last = snaps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
                 Console.WriteLine($"LastSnapshot={last.Name}");
             }
         }
@@ -221,10 +222,7 @@ else if (cmd == "inspect-run")
             Console.WriteLine($"DumpMetas={dumps.Length}");
             if (dumps.Length > 0)
             {
-                var last = dumps
-                    .Select(p => new FileInfo(p))
-                    .OrderByDescending(f => f.Name)
-                    .First();
+                var last = dumps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
                 Console.WriteLine($"LastDumpMeta={last.Name}");
                 Console.WriteLine("LastDumpMetaContent:");
                 Console.WriteLine(File.ReadAllText(last.FullName));
@@ -234,11 +232,24 @@ else if (cmd == "inspect-run")
         {
             Console.WriteLine("Dumps: missing");
         }
+
+        var minDir = Path.Combine(paths.RunDir, "minrepro");
+        if (Directory.Exists(minDir))
+        {
+            var reps = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
+            Console.WriteLine($"MinRepros={reps.Length}");
+            if (reps.Length > 0)
+                Console.WriteLine($"LastMinRepro={reps[0]}");
+        }
+        else
+        {
+            Console.WriteLine("MinRepros: none");
+        }
     }
 }
 else if (cmd == "bisect")
 {
-    var runId = ResolveRunId(root, runArg);
+    var runId = ResolveRunIdWithEvents(root, runArg);
     var paths = new RunPaths(root, runId);
 
     if (!Directory.Exists(paths.RunDir))
@@ -339,9 +350,112 @@ else if (cmd == "bisect")
         {
             Console.WriteLine($"Invariant={exFinal.InvariantName}");
             Console.WriteLine($"Message={exFinal.Detail}");
+
+            var minDir = MinReproWriter.Create(
+                paths: paths,
+                failureTick: lo,
+                seed: seed,
+                endTick: endTick,
+                invariantName: exFinal.InvariantName,
+                invariantMessage: exFinal.Detail,
+                serializer: stateSerializer,
+                newState: () => new WorldState());
+
+            Console.WriteLine($"MinReproDir={minDir}");
         }
 
         Environment.ExitCode = 2;
+    }
+}
+else if (cmd == "repro")
+{
+    var runId = ResolveRunIdWithEvents(root, runArg);
+    var paths = new RunPaths(root, runId);
+
+    var minRoot = Path.Combine(paths.RunDir, "minrepro");
+    if (!Directory.Exists(minRoot))
+        throw new DirectoryNotFoundException($"minrepro not found: {minRoot}");
+
+    long? tick = null;
+    if (args.Length > 3 && long.TryParse(args[3], out var t))
+        tick = t;
+
+    var minDir = tick.HasValue
+        ? Path.Combine(minRoot, $"tick-{tick.Value}")
+        : ResolveLatestMinRepro(minRoot);
+
+    if (!Directory.Exists(minDir))
+        throw new DirectoryNotFoundException($"minrepro dir not found: {minDir}");
+
+    var metaPath = Path.Combine(minDir, "meta.txt");
+    var mr = MinReproMetaReader.Read(metaPath);
+
+    if (!MinReproMetaReader.TryGetLong(mr, "failureTick", out var failureTick))
+        throw new InvalidOperationException($"minrepro meta missing failureTick: {metaPath}");
+
+    if (!MinReproMetaReader.TryGetLong(mr, "snapshotTick", out var snapshotTick))
+        snapshotTick = 0;
+
+    if (args.Length > 4 && ulong.TryParse(args[4], out var seedOverride))
+        seed = seedOverride;
+    else if (MinReproMetaReader.TryGetUlong(mr, "seed", out var seedFromMeta))
+        seed = seedFromMeta;
+
+    var snapPath = Path.Combine(minDir, "snapshot.json");
+    var eventsPath = Path.Combine(minDir, "events.jsonl");
+
+    if (!File.Exists(snapPath))
+        throw new FileNotFoundException($"snapshot.json not found: {snapPath}");
+    if (!File.Exists(eventsPath))
+        throw new FileNotFoundException($"events.jsonl not found: {eventsPath}");
+
+    var snap = SnapshotReader.Read(snapPath);
+    var world = stateSerializer.Deserialize(snap.StateJson);
+
+    var engine = new SimulationEngine<WorldState>();
+    engine.AddSystem(new PopulationSystem());
+
+    var memLog = new InMemoryEventLogMiddleware(codec);
+    engine.AddMiddleware(memLog);
+
+    var invariants = new List<EpochSim.Kernel.Validation.IInvariant<WorldState>>
+    {
+        new PopulationNonNegativeInvariant(),
+        new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
+    };
+
+    engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
+
+    try
+    {
+        var entries = EventLogReader.ReadAll(eventsPath);
+        var index = new EventLogIndex(entries);
+
+        engine.ReplayFromLog(world, seed, new SimTime(snapshotTick + 1), new SimTime(failureTick), index, codec);
+
+        Console.WriteLine($"RunDir={paths.RunDir}");
+        Console.WriteLine($"RunId={paths.RunId}");
+        Console.WriteLine($"MinReproDir={minDir}");
+        Console.WriteLine("ReproFailed_NoViolation");
+        Environment.ExitCode = 4;
+    }
+    catch (InvariantViolationException ex)
+    {
+        Console.WriteLine($"RunDir={paths.RunDir}");
+        Console.WriteLine($"RunId={paths.RunId}");
+        Console.WriteLine($"MinReproDir={minDir}");
+        Console.WriteLine(ex.Message);
+
+        if (ex.Time.Tick == failureTick)
+        {
+            Console.WriteLine("ReproOK");
+            Environment.ExitCode = 0;
+        }
+        else
+        {
+            Console.WriteLine($"ReproMismatch_ExpectedTick={failureTick}_ActualTick={ex.Time.Tick}");
+            Environment.ExitCode = 3;
+        }
     }
 }
 else
@@ -352,7 +466,8 @@ else
     Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatest] [endTick] [ignored] [seed]");
     Console.WriteLine("  list-runs <artifactsRoot> [limit]");
     Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
-    Console.WriteLine("  bisect <artifactsRoot> <runIdOrRunDirOrEmptyForLatest> [endTick] [ignored] [seed]");
+    Console.WriteLine("  bisect <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
+    Console.WriteLine("  repro <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [failureTickOrEmptyForLatest] [seedOverride]");
 }
 
 static string NormalizeRunId(string s)
@@ -364,23 +479,46 @@ static string NormalizeRunId(string s)
     return s;
 }
 
-static string ResolveRunId(string root, string runArg)
+static string ResolveRunIdWithEvents(string root, string runArg)
 {
     runArg = runArg.Trim();
 
     if (!string.IsNullOrWhiteSpace(runArg))
-        return NormalizeRunId(runArg);
+    {
+        var id = NormalizeRunId(runArg);
+        var dir = Path.Combine(root, id);
+        var events = Path.Combine(dir, "events.jsonl");
+        if (!File.Exists(events))
+            throw new FileNotFoundException($"events.jsonl not found for run: {dir}");
+        return id;
+    }
 
     if (!Directory.Exists(root))
         throw new DirectoryNotFoundException($"Artifacts root not found: {root}");
 
     var dirs = Directory.GetDirectories(root)
         .Select(d => new DirectoryInfo(d))
+        .OrderByDescending(d => d.Name);
+
+    foreach (var d in dirs)
+    {
+        var events = Path.Combine(d.FullName, "events.jsonl");
+        if (File.Exists(events))
+            return d.Name;
+    }
+
+    throw new InvalidOperationException($"No runs with events.jsonl found in {root}");
+}
+
+static string ResolveLatestMinRepro(string minRoot)
+{
+    var dirs = Directory.GetDirectories(minRoot)
+        .Select(d => new DirectoryInfo(d))
         .OrderByDescending(d => d.Name)
         .ToArray();
 
     if (dirs.Length == 0)
-        throw new InvalidOperationException($"No runs found in {root}");
+        throw new InvalidOperationException($"No minrepro dirs found in {minRoot}");
 
-    return dirs[0].Name;
+    return dirs[0].FullName;
 }
