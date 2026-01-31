@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build_lint_test:
+    name: Build • Lint • Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET (preview)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          dotnet-quality: "preview"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            **/*.props
+            **/*.targets
+            **/*.sln
+            **/*.slnx
+            NuGet.config
+
+      - name: Restore
+        run: dotnet restore ./EpochSim.slnx
+
+      - name: Build (Release, warnings as errors)
+        run: dotnet build ./EpochSim.slnx -c Release --no-restore -p:TreatWarningsAsErrors=true
+
+      - name: Install dotnet-format
+        run: |
+          dotnet tool install -g dotnet-format
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Lint (dotnet format verify)
+        run: dotnet format ./EpochSim.slnx --verify-no-changes --no-restore
+
+      - name: Test
+        run: dotnet test ./EpochSim.slnx -c Release --no-build --verbosity normal
