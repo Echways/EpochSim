@@ -72,6 +72,11 @@ else if (cmd == "validate-run")
     var memLog = new InMemoryEventLogMiddleware(codec);
     engine.AddMiddleware(memLog);
 
+    using var eventWriter = new EventLogWriter(paths.EventsPath);
+    engine.AddMiddleware(new TeeEventLogMiddleware(codec, eventWriter));
+
+    engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
+
     var invariants = new List<EpochSim.Kernel.Validation.IInvariant<WorldState>>
     {
         new PopulationNonNegativeInvariant(),
@@ -334,13 +339,9 @@ else if (cmd == "bisect")
             var mid = lo + ((hi - lo) / 2);
 
             if (FailsUpTo(mid, out var exMid))
-            {
                 hi = exMid!.Time.Tick;
-            }
             else
-            {
                 lo = mid + 1;
-            }
         }
 
         FailsUpTo(lo, out var exFinal);
@@ -362,6 +363,7 @@ else if (cmd == "bisect")
                 newState: () => new WorldState());
 
             Console.WriteLine($"MinReproDir={minDir}");
+            Console.WriteLine("MinReproFiles=snapshot.json,events.jsonl,meta.txt");
         }
 
         Environment.ExitCode = 2;
@@ -431,7 +433,13 @@ else if (cmd == "repro")
         var entries = EventLogReader.ReadAll(eventsPath);
         var index = new EventLogIndex(entries);
 
-        engine.ReplayFromLog(world, seed, new SimTime(snapshotTick + 1), new SimTime(failureTick), index, codec);
+        engine.ReplayFromLog(
+            state: world,
+            seed: seed,
+            start: new SimTime(snapshotTick + 1),
+            endInclusive: new SimTime(failureTick),
+            index: index,
+            codec: codec);
 
         Console.WriteLine($"RunDir={paths.RunDir}");
         Console.WriteLine($"RunId={paths.RunId}");
@@ -463,7 +471,7 @@ else
     Console.WriteLine("Usage:");
     Console.WriteLine("  run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
     Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
-    Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatest] [endTick] [ignored] [seed]");
+    Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
     Console.WriteLine("  list-runs <artifactsRoot> [limit]");
     Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
     Console.WriteLine("  bisect <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
