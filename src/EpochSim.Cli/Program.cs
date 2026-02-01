@@ -2,6 +2,7 @@
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
+using EpochSim.Execution.StateFingerprint;
 using EpochSim.Execution.Validation;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
@@ -40,6 +41,10 @@ if (cmd == "run")
     engine.AddMiddleware(new EventLogMiddleware(eventWriter, codec));
 
     var world = new WorldState();
+
+    using var fpWriter = new JsonlStateFingerprintWriter(paths.StateFpPath);
+    engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(world, stateSerializer, fpWriter));
+
     engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
 
     engine.RunTicks(world, seed: seed, start: SimTime.Zero, endInclusive: new SimTime(endTick));
@@ -74,6 +79,9 @@ else if (cmd == "validate-run")
 
     using var eventWriter = new EventLogWriter(paths.EventsPath);
     engine.AddMiddleware(new TeeEventLogMiddleware(codec, eventWriter));
+
+    using var fpWriter = new JsonlStateFingerprintWriter(paths.StateFpPath);
+    engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(world, stateSerializer, fpWriter));
 
     engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
 
@@ -132,6 +140,68 @@ else if (cmd == "fast-replay")
     Console.WriteLine($"Population={world.Population}, Fires={world.Fires}");
     Console.WriteLine($"EndTick={endTick}");
 }
+else if (cmd == "verify-run")
+{
+    var runId = ResolveRunIdWithEvents(root, runArg);
+    var paths = new RunPaths(root, runId);
+
+    if (!File.Exists(paths.StateFpPath))
+        throw new FileNotFoundException($"statefp.jsonl not found: {paths.StateFpPath}");
+
+    var meta = RunMetaReader.Read(paths.MetaPath);
+
+    if (args.Length <= 3 || !long.TryParse(args[3], out endTick))
+    {
+        if (!RunMetaReader.TryGetLong(meta, "endTick", out endTick))
+            endTick = 500;
+    }
+
+    if (args.Length <= 5 || !ulong.TryParse(args[5], out seed))
+    {
+        if (!RunMetaReader.TryGetUlong(meta, "seed", out seed))
+            seed = 12345UL;
+    }
+
+    var expected = JsonlStateFingerprintWriter.ReadAll(paths.StateFpPath);
+
+    var engine = new SimulationEngine<WorldState>();
+    engine.AddSystem(new PopulationSystem());
+
+    var sink = new InMemoryStateFingerprintSink();
+    var tmpState = new WorldState();
+    engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(tmpState, stateSerializer, sink));
+
+    var replayed = SnapshotRunner.LoadBestAndReplayTo(
+        engine: engine,
+        snapshotsDir: paths.SnapshotsDir,
+        eventsPath: paths.EventsPath,
+        serializer: stateSerializer,
+        codec: codec,
+        seed: seed,
+        endTick: endTick,
+        newState: () => tmpState);
+
+    var mismatch = FindFirstMismatch(expected, sink.Records, endTick);
+
+    Console.WriteLine($"RunDir={paths.RunDir}");
+    Console.WriteLine($"RunId={paths.RunId}");
+    Console.WriteLine($"EndTick={endTick}");
+    Console.WriteLine($"Seed={seed}");
+
+    if (mismatch is null)
+    {
+        Console.WriteLine("VerifyOK");
+        Console.WriteLine($"Population={replayed.Population}, Fires={replayed.Fires}");
+        Environment.ExitCode = 0;
+    }
+    else
+    {
+        Console.WriteLine($"VerifyMismatchTick={mismatch.Value.Tick}");
+        Console.WriteLine($"Expected={mismatch.Value.Expected}");
+        Console.WriteLine($"Actual={mismatch.Value.Actual}");
+        Environment.ExitCode = 3;
+    }
+}
 else if (cmd == "list-runs")
 {
     var limit = args.Length > 2 && int.TryParse(args[2], out var l) ? l : 20;
@@ -150,24 +220,25 @@ else if (cmd == "list-runs")
             .ToArray();
 
         Console.WriteLine($"Root={root}");
-        Console.WriteLine("RunId | HasMeta | HasEvents | Snapshots | Dumps | MinRepros");
+        Console.WriteLine("RunId | HasMeta | HasEvents | HasStateFp | Snapshots | Dumps | MinRepros");
 
         foreach (var d in dirs)
         {
-            var runId = d.Name;
-            var meta = File.Exists(Path.Combine(d.FullName, "meta.txt"));
-            var events = File.Exists(Path.Combine(d.FullName, "events.jsonl"));
-            var snaps = Directory.Exists(Path.Combine(d.FullName, "snapshots"))
+            var runId2 = d.Name;
+            var meta2 = File.Exists(Path.Combine(d.FullName, "meta.txt"));
+            var events2 = File.Exists(Path.Combine(d.FullName, "events.jsonl"));
+            var statefp2 = File.Exists(Path.Combine(d.FullName, "statefp.jsonl"));
+            var snaps2 = Directory.Exists(Path.Combine(d.FullName, "snapshots"))
                 ? Directory.EnumerateFiles(Path.Combine(d.FullName, "snapshots"), "snapshot-*.json").Count()
                 : 0;
-            var dumps = Directory.Exists(Path.Combine(d.FullName, "dumps"))
+            var dumps2 = Directory.Exists(Path.Combine(d.FullName, "dumps"))
                 ? Directory.EnumerateFiles(Path.Combine(d.FullName, "dumps"), "violation-meta-*.txt").Count()
                 : 0;
-            var minrepros = Directory.Exists(Path.Combine(d.FullName, "minrepro"))
+            var minrepros2 = Directory.Exists(Path.Combine(d.FullName, "minrepro"))
                 ? Directory.GetDirectories(Path.Combine(d.FullName, "minrepro")).Length
                 : 0;
 
-            Console.WriteLine($"{runId} | {(meta ? "Y" : "N")} | {(events ? "Y" : "N")} | {snaps} | {dumps} | {minrepros}");
+            Console.WriteLine($"{runId2} | {(meta2 ? "Y" : "N")} | {(events2 ? "Y" : "N")} | {(statefp2 ? "Y" : "N")} | {snaps2} | {dumps2} | {minrepros2}");
         }
     }
 }
@@ -197,14 +268,14 @@ else if (cmd == "inspect-run")
         }
 
         if (File.Exists(paths.EventsPath))
-        {
-            var n = File.ReadLines(paths.EventsPath).LongCount();
-            Console.WriteLine($"EventsLines={n}");
-        }
+            Console.WriteLine($"EventsLines={File.ReadLines(paths.EventsPath).LongCount()}");
         else
-        {
             Console.WriteLine("Events: missing");
-        }
+
+        if (File.Exists(paths.StateFpPath))
+            Console.WriteLine($"StateFpLines={File.ReadLines(paths.StateFpPath).LongCount()}");
+        else
+            Console.WriteLine("StateFp: missing");
 
         if (Directory.Exists(paths.SnapshotsDir))
         {
@@ -229,8 +300,6 @@ else if (cmd == "inspect-run")
             {
                 var last = dumps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
                 Console.WriteLine($"LastDumpMeta={last.Name}");
-                Console.WriteLine("LastDumpMetaContent:");
-                Console.WriteLine(File.ReadAllText(last.FullName));
             }
         }
         else
@@ -472,6 +541,7 @@ else
     Console.WriteLine("  run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
     Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
     Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
+    Console.WriteLine("  verify-run <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
     Console.WriteLine("  list-runs <artifactsRoot> [limit]");
     Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
     Console.WriteLine("  bisect <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
@@ -529,4 +599,31 @@ static string ResolveLatestMinRepro(string minRoot)
         throw new InvalidOperationException($"No minrepro dirs found in {minRoot}");
 
     return dirs[0].FullName;
+}
+
+static (long Tick, string Expected, string Actual)? FindFirstMismatch(
+    Dictionary<long, string> expected,
+    IReadOnlyList<(long Tick, string Hash)> actual,
+    long endTick)
+{
+    var actualMap = new Dictionary<long, string>();
+    foreach (var r in actual)
+        actualMap[r.Tick] = r.Hash;
+
+    for (var t = 0L; t <= endTick; t++)
+    {
+        var hasE = expected.TryGetValue(t, out var e);
+        var hasA = actualMap.TryGetValue(t, out var a);
+
+        if (!hasE && hasA)
+            return (t, "<missing>", a);
+
+        if (hasE && !hasA)
+            return (t, e!, "<missing>");
+
+        if (hasE && hasA && !string.Equals(e, a, StringComparison.Ordinal))
+            return (t, e!, a!);
+    }
+
+    return null;
 }
