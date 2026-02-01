@@ -7,7 +7,8 @@ public static class TimelineDumper
         long fromTickInclusive,
         long toTickInclusive,
         int maxEventsPerTick,
-        int maxPayloadChars)
+        int maxPayloadChars,
+        IEventPayloadFormatter formatter)
     {
         if (toTickInclusive < fromTickInclusive)
             (fromTickInclusive, toTickInclusive) = (toTickInclusive, fromTickInclusive);
@@ -28,11 +29,19 @@ public static class TimelineDumper
             {
                 if (shown >= maxEventsPerTick) break;
 
-                var payload = NormalizePayload(p);
+                var payload = p ?? "";
+                if (formatter.TryFormat(k, payload, out var pretty))
+                    payload = pretty;
+
+                payload = NormalizePayload(payload);
                 if (payload.Length > maxPayloadChars)
                     payload = payload.Substring(0, maxPayloadChars) + "…";
 
-                Console.WriteLine($"  - {k} {payload}");
+                if (payload.Length == 0)
+                    Console.WriteLine($"  - {k}");
+                else
+                    Console.WriteLine($"  - {k} {payload}");
+
                 shown++;
             }
 
