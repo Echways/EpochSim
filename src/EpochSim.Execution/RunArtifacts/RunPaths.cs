@@ -8,6 +8,7 @@ public sealed class RunPaths(string rootDir, string runId)
     public string RunDir => Path.Combine(RootDir, RunId);
     public string EventsPath => Path.Combine(RunDir, "events.jsonl");
     public string TracePath => Path.Combine(RunDir, "trace.jsonl");
+    public string StateFpPath => Path.Combine(RunDir, "statefp.jsonl");
     public string SnapshotsDir => Path.Combine(RunDir, "snapshots");
     public string DumpsDir => Path.Combine(RunDir, "dumps");
     public string MetaPath => Path.Combine(RunDir, "meta.txt");
