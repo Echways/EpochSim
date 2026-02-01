@@ -1,4 +1,5 @@
 ﻿using EpochSim.Execution;
+using EpochSim.Execution.Diagnostics;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
@@ -201,6 +202,69 @@ else if (cmd == "verify-run")
         Console.WriteLine($"Actual={mismatch.Value.Actual}");
         Environment.ExitCode = 3;
     }
+}
+else if (cmd == "event-stats")
+{
+    var runId = ResolveRunIdWithEvents(root, runArg);
+    var paths = new RunPaths(root, runId);
+
+    var topN = args.Length > 3 && int.TryParse(args[3], out var tn) ? tn : 20;
+    long? fromTick = args.Length > 4 && long.TryParse(args[4], out var ft) ? ft : null;
+    long? toTick = args.Length > 5 && long.TryParse(args[5], out var tt) ? tt : null;
+
+    if (!File.Exists(paths.EventsPath))
+        throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+
+    var stats = EventLogStatsComputer.Compute(paths.EventsPath, fromTick, toTick, topN);
+
+    Console.WriteLine($"RunDir={paths.RunDir}");
+    Console.WriteLine($"RunId={paths.RunId}");
+    Console.WriteLine($"EventsTotal={stats.TotalEvents}");
+    Console.WriteLine($"TicksRange={stats.MinTick}..{stats.MaxTick}");
+    Console.WriteLine($"Kinds={stats.ByKind.Count}");
+    Console.WriteLine();
+
+    Console.WriteLine($"TopKinds (top {Math.Min(topN, stats.TopKinds.Count)}):");
+    foreach (var (k, c) in stats.TopKinds)
+        Console.WriteLine($"  {k} = {c}");
+    Console.WriteLine();
+
+    Console.WriteLine($"TopTicks (top {Math.Min(topN, stats.TopTicks.Count)}):");
+    foreach (var (t, c) in stats.TopTicks)
+        Console.WriteLine($"  t={t} events={c}");
+}
+else if (cmd == "timeline")
+{
+    var runId = ResolveRunIdWithEvents(root, runArg);
+    var paths = new RunPaths(root, runId);
+
+    if (!File.Exists(paths.EventsPath))
+        throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+
+    var meta = RunMetaReader.Read(paths.MetaPath);
+    var endFromMeta = RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500;
+
+    var from = args.Length > 3 && long.TryParse(args[3], out var f) ? f : Math.Max(0, endFromMeta - 50);
+    var to = args.Length > 4 && long.TryParse(args[4], out var t) ? t : endFromMeta;
+
+    var maxPerTick = args.Length > 5 && int.TryParse(args[5], out var mpt) ? mpt : 50;
+    var maxPayload = args.Length > 6 && int.TryParse(args[6], out var mp) ? mp : 120;
+
+    Console.WriteLine($"RunDir={paths.RunDir}");
+    Console.WriteLine($"RunId={paths.RunId}");
+    Console.WriteLine();
+
+    TimelineDumper.Dump(paths.EventsPath, from, to, maxPerTick, maxPayload);
+}
+else if (cmd == "pretty-inspect")
+{
+    var runId = string.IsNullOrWhiteSpace(runArg) ? ResolveLatestRunId(root) : NormalizeRunId(runArg);
+    var paths = new RunPaths(root, runId);
+
+    if (!Directory.Exists(paths.RunDir))
+        throw new DirectoryNotFoundException($"RunDir not found: {paths.RunDir}");
+
+    PrettyRunInspector.Print(paths);
 }
 else if (cmd == "list-runs")
 {
@@ -542,6 +606,9 @@ else
     Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
     Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
     Console.WriteLine("  verify-run <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
+    Console.WriteLine("  event-stats <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [topN] [fromTick?] [toTick?]");
+    Console.WriteLine("  timeline <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [fromTick] [toTick] [maxPerTick] [maxPayloadChars]");
+    Console.WriteLine("  pretty-inspect <artifactsRoot> [runIdOrRunDirOrEmptyForLatest]");
     Console.WriteLine("  list-runs <artifactsRoot> [limit]");
     Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
     Console.WriteLine("  bisect <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
@@ -555,6 +622,22 @@ static string NormalizeRunId(string s)
     if (s.Contains(Path.DirectorySeparatorChar) || s.Contains(Path.AltDirectorySeparatorChar))
         return Path.GetFileName(s);
     return s;
+}
+
+static string ResolveLatestRunId(string root)
+{
+    if (!Directory.Exists(root))
+        throw new DirectoryNotFoundException($"Artifacts root not found: {root}");
+
+    var dirs = Directory.GetDirectories(root)
+        .Select(d => new DirectoryInfo(d))
+        .OrderByDescending(d => d.Name)
+        .ToArray();
+
+    if (dirs.Length == 0)
+        throw new InvalidOperationException($"No runs found in {root}");
+
+    return dirs[0].Name;
 }
 
 static string ResolveRunIdWithEvents(string root, string runArg)
@@ -608,21 +691,24 @@ static (long Tick, string Expected, string Actual)? FindFirstMismatch(
 {
     var actualMap = new Dictionary<long, string>();
     foreach (var r in actual)
-        actualMap[r.Tick] = r.Hash;
+        actualMap[r.Tick] = r.Hash ?? "<null>";
 
     for (var t = 0L; t <= endTick; t++)
     {
-        var hasE = expected.TryGetValue(t, out var e);
-        var hasA = actualMap.TryGetValue(t, out var a);
+        var hasE = expected.TryGetValue(t, out var eRaw);
+        var hasA = actualMap.TryGetValue(t, out var aRaw);
+
+        var e = eRaw ?? "<null>";
+        var a = aRaw ?? "<null>";
 
         if (!hasE && hasA)
             return (t, "<missing>", a);
 
         if (hasE && !hasA)
-            return (t, e!, "<missing>");
+            return (t, e, "<missing>");
 
         if (hasE && hasA && !string.Equals(e, a, StringComparison.Ordinal))
-            return (t, e!, a!);
+            return (t, e, a);
     }
 
     return null;
