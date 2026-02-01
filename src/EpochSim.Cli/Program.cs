@@ -205,12 +205,13 @@ else if (cmd == "verify-run")
 }
 else if (cmd == "event-stats")
 {
-    var runId = ResolveRunIdWithEvents(root, runArg);
+    var parsed = ParseOptionalRunIdThenLongLong(args, firstArgIndexAfterRoot: 2);
+    var runId = parsed.RunId ?? ResolveRunIdWithEvents(root, "");
     var paths = new RunPaths(root, runId);
 
-    var topN = args.Length > 3 && int.TryParse(args[3], out var tn) ? tn : 20;
-    long? fromTick = args.Length > 4 && long.TryParse(args[4], out var ft) ? ft : null;
-    long? toTick = args.Length > 5 && long.TryParse(args[5], out var tt) ? tt : null;
+    var topN = args.Length > parsed.NextIndex && int.TryParse(args[parsed.NextIndex], out var tn) ? tn : 20;
+    long? fromTick = args.Length > parsed.NextIndex + 1 && long.TryParse(args[parsed.NextIndex + 1], out var ft) ? ft : null;
+    long? toTick = args.Length > parsed.NextIndex + 2 && long.TryParse(args[parsed.NextIndex + 2], out var tt) ? tt : null;
 
     if (!File.Exists(paths.EventsPath))
         throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
@@ -235,7 +236,8 @@ else if (cmd == "event-stats")
 }
 else if (cmd == "timeline")
 {
-    var runId = ResolveRunIdWithEvents(root, runArg);
+    var parsed = ParseOptionalRunIdThenLongLong(args, firstArgIndexAfterRoot: 2);
+    var runId = parsed.RunId ?? ResolveRunIdWithEvents(root, "");
     var paths = new RunPaths(root, runId);
 
     if (!File.Exists(paths.EventsPath))
@@ -244,17 +246,21 @@ else if (cmd == "timeline")
     var meta = RunMetaReader.Read(paths.MetaPath);
     var endFromMeta = RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500;
 
-    var from = args.Length > 3 && long.TryParse(args[3], out var f) ? f : Math.Max(0, endFromMeta - 50);
-    var to = args.Length > 4 && long.TryParse(args[4], out var t) ? t : endFromMeta;
+    var from = parsed.FirstLong ?? Math.Max(0, endFromMeta - 50);
+    var to = parsed.SecondLong ?? endFromMeta;
 
-    var maxPerTick = args.Length > 5 && int.TryParse(args[5], out var mpt) ? mpt : 50;
-    var maxPayload = args.Length > 6 && int.TryParse(args[6], out var mp) ? mp : 120;
+    var maxPerTick = args.Length > parsed.NextIndex && int.TryParse(args[parsed.NextIndex], out var mpt) ? mpt : 50;
+    var maxPayload = args.Length > parsed.NextIndex + 1 && int.TryParse(args[parsed.NextIndex + 1], out var mp) ? mp : 120;
+
+    var formatter = new CompositeEventPayloadFormatter(
+        new PopulationEventPayloadFormatter(),
+        new JsonEventPayloadFormatter());
 
     Console.WriteLine($"RunDir={paths.RunDir}");
     Console.WriteLine($"RunId={paths.RunId}");
     Console.WriteLine();
 
-    TimelineDumper.Dump(paths.EventsPath, from, to, maxPerTick, maxPayload);
+    TimelineDumper.Dump(paths.EventsPath, from, to, maxPerTick, maxPayload, formatter);
 }
 else if (cmd == "pretty-inspect")
 {
@@ -606,8 +612,8 @@ else
     Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed]");
     Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
     Console.WriteLine("  verify-run <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
-    Console.WriteLine("  event-stats <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [topN] [fromTick?] [toTick?]");
-    Console.WriteLine("  timeline <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [fromTick] [toTick] [maxPerTick] [maxPayloadChars]");
+    Console.WriteLine("  event-stats <artifactsRoot> [runId?] [topN?] [fromTick?] [toTick?]");
+    Console.WriteLine("  timeline <artifactsRoot> [runId?] [fromTick?] [toTick?] [maxPerTick?] [maxPayloadChars?]");
     Console.WriteLine("  pretty-inspect <artifactsRoot> [runIdOrRunDirOrEmptyForLatest]");
     Console.WriteLine("  list-runs <artifactsRoot> [limit]");
     Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
@@ -712,4 +718,50 @@ static (long Tick, string Expected, string Actual)? FindFirstMismatch(
     }
 
     return null;
+}
+
+static (string? RunId, long? FirstLong, long? SecondLong, int NextIndex) ParseOptionalRunIdThenLongLong(string[] args, int firstArgIndexAfterRoot)
+{
+    var i = firstArgIndexAfterRoot + 1;
+
+    if (args.Length <= i)
+        return (null, null, null, i);
+
+    var a = args[i];
+
+    if (!long.TryParse(a, out var firstNum))
+    {
+        var runId = NormalizeRunId(a);
+        i++;
+
+        long? n1 = null;
+        long? n2 = null;
+
+        if (args.Length > i && long.TryParse(args[i], out var v1))
+        {
+            n1 = v1;
+            i++;
+        }
+
+        if (args.Length > i && long.TryParse(args[i], out var v2))
+        {
+            n2 = v2;
+            i++;
+        }
+
+        return (runId, n1, n2, i);
+    }
+    else
+    {
+        i++;
+
+        long? n2 = null;
+        if (args.Length > i && long.TryParse(args[i], out var v2))
+        {
+            n2 = v2;
+            i++;
+        }
+
+        return (null, firstNum, n2, i);
+    }
 }
