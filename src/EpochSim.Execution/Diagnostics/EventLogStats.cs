@@ -1,4 +1,4 @@
-using EpochSim.Serialization.EventLog;
+using System.Text.Json;
 
 namespace EpochSim.Execution.Diagnostics;
 
@@ -9,14 +9,21 @@ public sealed record EventLogStats(
     IReadOnlyDictionary<string, long> ByKind,
     IReadOnlyDictionary<long, long> ByTick,
     IReadOnlyList<(long Tick, long Count)> TopTicks,
-    IReadOnlyList<(string Kind, long Count)> TopKinds);
+    IReadOnlyList<(string Kind, long Count)> TopKinds,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<int, long>>> IntFieldDistributions);
 
 public static class EventLogStatsComputer
 {
-    public static EventLogStats Compute(string eventsPath, long? fromTickInclusive = null, long? toTickInclusive = null, int topN = 20)
+    public static EventLogStats Compute(
+        string eventsPath,
+        long? fromTickInclusive = null,
+        long? toTickInclusive = null,
+        int topN = 20,
+        ISet<string>? allowedKinds = null)
     {
         var byKind = new Dictionary<string, long>(StringComparer.Ordinal);
         var byTick = new Dictionary<long, long>();
+        var dist = new Dictionary<string, Dictionary<string, Dictionary<int, long>>>(StringComparer.Ordinal);
 
         long total = 0;
         long minTick = long.MaxValue;
@@ -31,6 +38,10 @@ public static class EventLogStatsComputer
             if (toTickInclusive.HasValue && tick > toTickInclusive.Value) continue;
 
             var kind = ReadStringField(line, "\"kind\":");
+            if (allowedKinds is not null && allowedKinds.Count > 0 && !allowedKinds.Contains(kind))
+                continue;
+
+            var payload = ReadStringField(line, "\"payload\":");
 
             total++;
 
@@ -42,6 +53,9 @@ public static class EventLogStatsComputer
 
             byTick.TryGetValue(tick, out var tc);
             byTick[tick] = tc + 1;
+
+            if (!string.IsNullOrWhiteSpace(payload))
+                TryAccumulateIntFields(dist, kind, payload);
         }
 
         if (total == 0)
@@ -64,6 +78,15 @@ public static class EventLogStatsComputer
             .Select(kv => (kv.Key, kv.Value))
             .ToArray();
 
+        var roDist = new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<int, long>>>(StringComparer.Ordinal);
+        foreach (var (k, fields) in dist)
+        {
+            var roFields = new Dictionary<string, IReadOnlyDictionary<int, long>>(StringComparer.Ordinal);
+            foreach (var (f, map) in fields)
+                roFields[f] = map;
+            roDist[k] = roFields;
+        }
+
         return new EventLogStats(
             TotalEvents: total,
             MinTick: minTick,
@@ -71,7 +94,44 @@ public static class EventLogStatsComputer
             ByKind: byKind,
             ByTick: byTick,
             TopTicks: topTicks,
-            TopKinds: topKinds);
+            TopKinds: topKinds,
+            IntFieldDistributions: roDist);
+    }
+
+    private static void TryAccumulateIntFields(
+        Dictionary<string, Dictionary<string, Dictionary<int, long>>> dist,
+        string kind,
+        string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
+
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.Value.ValueKind != JsonValueKind.Number) continue;
+                if (!p.Value.TryGetInt32(out var iv)) continue;
+
+                if (!dist.TryGetValue(kind, out var fields))
+                {
+                    fields = new Dictionary<string, Dictionary<int, long>>(StringComparer.Ordinal);
+                    dist[kind] = fields;
+                }
+
+                if (!fields.TryGetValue(p.Name, out var map))
+                {
+                    map = new Dictionary<int, long>();
+                    fields[p.Name] = map;
+                }
+
+                map.TryGetValue(iv, out var c);
+                map[iv] = c + 1;
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static long ReadLongField(string line, string field)
