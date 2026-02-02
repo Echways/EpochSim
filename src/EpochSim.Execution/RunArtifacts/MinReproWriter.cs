@@ -1,5 +1,6 @@
 using EpochSim.Serialization.Snapshots;
 using EpochSim.Serialization.State;
+using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Execution.RunArtifacts;
 
@@ -60,27 +61,9 @@ public static class MinReproWriter
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var t = ReadTick(line);
+            var t = EventLogLine.ReadTick(line);
             if (t > tickExclusive && t <= tickInclusive)
                 w.WriteLine(line);
         }
-    }
-
-    private static long ReadTick(string line)
-    {
-        var field = "\"t\":";
-        var i = line.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException("Missing tick field");
-
-        i += field.Length;
-        while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
-
-        var end = i;
-        while (end < line.Length && (char.IsDigit(line[end]) || line[end] == '-')) end++;
-
-        var span = line.AsSpan(i, end - i);
-        if (!long.TryParse(span, out var v)) throw new FormatException("Invalid tick value");
-
-        return v;
     }
 }

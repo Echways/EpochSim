@@ -11,10 +11,10 @@ public sealed class CommandRouter<TState>
     {
         foreach (var cmd in commands)
         {
-            if (!_handlers.TryGetValue(cmd.GetType(), out var h))
+            if (!_handlers.TryGetValue(cmd.GetType(), out var handler))
                 throw new InvalidOperationException($"No handler registered for command {cmd.GetType().Name}");
 
-            h.Handle(state, cmd, events);
+            handler.Handle(state, cmd, events);
         }
     }
 }

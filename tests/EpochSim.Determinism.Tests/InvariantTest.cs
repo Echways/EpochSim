@@ -1,7 +1,7 @@
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
-using EpochSim.Execution.Validation;
 using EpochSim.Kernel.Time;
+using EpochSim.Kernel.Validation;
 using EpochSim.Samples.Population;
 using Xunit;
 
@@ -18,7 +18,7 @@ public sealed class InvariantTests
 
         var world = new WorldState { Population = -1 };
 
-        var invariants = new List<EpochSim.Kernel.Validation.IInvariant<WorldState>>
+        var invariants = new List<IInvariant<WorldState>>
         {
             new PopulationNonNegativeInvariant()
         };

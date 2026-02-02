@@ -1,4 +1,5 @@
 using System.Text;
+using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Execution.StateFingerprint;
 
@@ -32,38 +33,10 @@ public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprint
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var t = ReadLongField(line, "\"t\":");
-            var h = ReadStringField(line, "\"h\":\"");
+            var t = EventLogLine.ReadLongField(line, "\"t\":");
+            var h = EventLogLine.ReadStringField(line, "\"h\":");
             dict[t] = h;
         }
         return dict;
-    }
-
-    private static long ReadLongField(string line, string field)
-    {
-        var i = line.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException("Missing field");
-        i += field.Length;
-        while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
-
-        var end = i;
-        while (end < line.Length && (char.IsDigit(line[end]) || line[end] == '-')) end++;
-
-        if (!long.TryParse(line.AsSpan(i, end - i), out var v))
-            throw new FormatException("Bad number");
-
-        return v;
-    }
-
-    private static string ReadStringField(string line, string fieldPrefix)
-    {
-        var i = line.IndexOf(fieldPrefix, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException("Missing field");
-        i += fieldPrefix.Length;
-
-        var end = line.IndexOf('"', i);
-        if (end < 0) throw new FormatException("Bad string");
-
-        return line.Substring(i, end - i);
     }
 }

@@ -94,7 +94,7 @@ public sealed class EventStatsCommand : ICliCommand
                     Console.WriteLine($"    {val} = {cnt}");
 
                 if (map.Count > topVals.Length)
-                    Console.WriteLine($"    … +{map.Count - topVals.Length} more values");
+                    Console.WriteLine($"    ... +{map.Count - topVals.Length} more values");
             }
 
             Console.WriteLine();

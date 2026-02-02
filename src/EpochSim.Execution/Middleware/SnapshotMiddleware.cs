@@ -1,4 +1,3 @@
-using EpochSim.Execution.Middleware;
 using EpochSim.Kernel.Time;
 using EpochSim.Serialization.Snapshots;
 using EpochSim.Serialization.State;

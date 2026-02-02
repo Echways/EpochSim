@@ -1,3 +1,5 @@
+using EpochSim.Serialization.EventLog;
+
 namespace EpochSim.Execution.Diagnostics;
 
 public static class TimelineDumper
@@ -38,7 +40,7 @@ public static class TimelineDumper
 
                 payload = NormalizePayload(payload);
                 if (payload.Length > maxPayloadChars)
-                    payload = payload.Substring(0, maxPayloadChars) + "…";
+                    payload = payload.Substring(0, maxPayloadChars) + "...";
 
                 if (payload.Length == 0)
                     Console.WriteLine($"  - {k}");
@@ -49,7 +51,7 @@ public static class TimelineDumper
             }
 
             if (totalForTick > maxEventsPerTick)
-                Console.WriteLine($"  … +{totalForTick - maxEventsPerTick} more");
+                Console.WriteLine($"  ... +{totalForTick - maxEventsPerTick} more");
 
             Console.WriteLine();
         }
@@ -58,15 +60,15 @@ public static class TimelineDumper
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var tick = ReadLongField(line, "\"t\":");
+            var tick = EventLogLine.ReadTick(line);
             if (tick < fromTickInclusive) continue;
             if (tick > toTickInclusive) break;
 
-            var kind = ReadStringField(line, "\"kind\":");
+            var kind = EventLogLine.ReadKind(line);
             if (allowedKinds is not null && allowedKinds.Count > 0 && !allowedKinds.Contains(kind))
                 continue;
 
-            var payload = ReadStringField(line, "\"payload\":");
+            var payload = EventLogLine.ReadPayload(line);
 
             matchedTotal++;
 
@@ -110,62 +112,4 @@ public static class TimelineDumper
         return s.Trim();
     }
 
-    private static long ReadLongField(string line, string field)
-    {
-        var i = line.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException($"Missing field {field}");
-
-        i += field.Length;
-        while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
-
-        var end = i;
-        while (end < line.Length && (char.IsDigit(line[end]) || line[end] == '-')) end++;
-
-        if (!long.TryParse(line.AsSpan(i, end - i), out var v))
-            throw new FormatException($"Invalid number for {field}");
-
-        return v;
-    }
-
-    private static string ReadStringField(string line, string field)
-    {
-        var i = line.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException($"Missing field {field}");
-
-        i += field.Length;
-        while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
-
-        if (i >= line.Length || line[i] != '"') throw new FormatException($"Invalid string for {field}");
-        i++;
-
-        var sb = new System.Text.StringBuilder();
-        while (i < line.Length)
-        {
-            var ch = line[i++];
-
-            if (ch == '"') break;
-
-            if (ch == '\\')
-            {
-                if (i >= line.Length) throw new FormatException($"Invalid escape in {field}");
-                var e = line[i++];
-
-                sb.Append(e switch
-                {
-                    '"' => '"',
-                    '\\' => '\\',
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    _ => e
-                });
-
-                continue;
-            }
-
-            sb.Append(ch);
-        }
-
-        return sb.ToString();
-    }
 }

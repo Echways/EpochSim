@@ -11,16 +11,13 @@ namespace EpochSim.Execution;
 public sealed class SimulationEngine<TState>
 {
     private readonly List<ISystem<TState>> _systems = [];
-    private readonly List<IExecutionMiddleware> _mw = [];
-    private readonly ExecutionOptions _options;
+    private readonly List<IExecutionMiddleware> _middleware = [];
     private readonly CommandRouter<TState> _commandRouter = new();
-
-    public SimulationEngine(ExecutionOptions? options = null) => _options = options ?? new();
 
     public IScheduler Scheduler { get; } = new Scheduler();
 
     public void AddSystem(ISystem<TState> system) => _systems.Add(system);
-    public void AddMiddleware(IExecutionMiddleware middleware) => _mw.Add(middleware);
+    public void AddMiddleware(IExecutionMiddleware middleware) => _middleware.Add(middleware);
 
     public void RegisterCommandHandler(ICommandHandler<TState> handler)
         => _commandRouter.Register(handler);
@@ -36,15 +33,15 @@ public sealed class SimulationEngine<TState>
 
         while (time.Tick <= endInclusive.Tick)
         {
-            foreach (var m in _mw) m.OnTickStart(time);
+            foreach (var middleware in _middleware) middleware.OnTickStart(time);
 
             var tickCtx = new TickContext<TState>(time, state, Scheduler, commands, rng);
 
             foreach (var sys in _systems)
             {
-                foreach (var m in _mw) m.OnSystemTickStart(time, sys.Name);
+                foreach (var middleware in _middleware) middleware.OnSystemTickStart(time, sys.Name);
                 sys.Tick(tickCtx);
-                foreach (var m in _mw) m.OnSystemTickEnd(time, sys.Name);
+                foreach (var middleware in _middleware) middleware.OnSystemTickEnd(time, sys.Name);
             }
 
             var events = new EventBuffer();
@@ -62,12 +59,12 @@ public sealed class SimulationEngine<TState>
 
                 foreach (var ev in emitted)
                 {
-                    foreach (var m in _mw) m.OnEventDispatched(time, ev);
+                    foreach (var middleware in _middleware) middleware.OnEventDispatched(time, ev);
                     foreach (var sys in _systems) sys.Handle(evtCtxNow, ev);
                 }
             }
 
-            foreach (var m in _mw) m.OnTickEnd(time);
+            foreach (var middleware in _middleware) middleware.OnTickEnd(time);
 
             time = time.AddTicks(1);
             DrainScheduledAt(time, state, commands, rng);
@@ -90,7 +87,7 @@ public sealed class SimulationEngine<TState>
 
         while (time.Tick <= endInclusive.Tick)
         {
-            foreach (var m in _mw) m.OnTickStart(time);
+            foreach (var middleware in _middleware) middleware.OnTickStart(time);
 
             var atTick = index.GetAtTick(time.Tick);
             if (atTick.Count > 0)
@@ -104,14 +101,14 @@ public sealed class SimulationEngine<TState>
                     if (!codec.TryDecode(e.Kind, e.Payload, out var ev))
                         throw new InvalidOperationException($"No codec for event kind {e.Kind}");
 
-                    foreach (var m in _mw) m.OnEventDispatched(time, ev);
+                    foreach (var middleware in _middleware) middleware.OnEventDispatched(time, ev);
 
                     foreach (var sys in _systems)
                         sys.Handle(evtCtx, ev);
                 }
             }
 
-            foreach (var m in _mw) m.OnTickEnd(time);
+            foreach (var middleware in _middleware) middleware.OnTickEnd(time);
 
             time = time.AddTicks(1);
         }
@@ -138,7 +135,7 @@ public sealed class SimulationEngine<TState>
             if (nextTime is null || nextTime.Value.Tick != time.Tick) break;
 
             Scheduler.TryDequeue(out var item);
-            foreach (var m in _mw) m.OnEventDispatched(time, item.Event);
+            foreach (var middleware in _middleware) middleware.OnEventDispatched(time, item.Event);
 
             var evtCtx = new EventContext<TState>(time, state, Scheduler, commands, rng);
             foreach (var sys in _systems)
