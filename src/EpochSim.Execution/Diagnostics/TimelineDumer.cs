@@ -8,10 +8,13 @@ public static class TimelineDumper
         long toTickInclusive,
         int maxEventsPerTick,
         int maxPayloadChars,
-        IEventPayloadFormatter formatter)
+        IEventPayloadFormatter formatter,
+        ISet<string>? allowedKinds)
     {
         if (toTickInclusive < fromTickInclusive)
             (fromTickInclusive, toTickInclusive) = (toTickInclusive, fromTickInclusive);
+
+        var matchedTotal = 0L;
 
         var currentTick = (long?)null;
         var emittedForTick = 0;
@@ -60,7 +63,12 @@ public static class TimelineDumper
             if (tick > toTickInclusive) break;
 
             var kind = ReadStringField(line, "\"kind\":");
+            if (allowedKinds is not null && allowedKinds.Count > 0 && !allowedKinds.Contains(kind))
+                continue;
+
             var payload = ReadStringField(line, "\"payload\":");
+
+            matchedTotal++;
 
             if (currentTick is null)
             {
@@ -88,6 +96,9 @@ public static class TimelineDumper
         }
 
         Flush();
+
+        if (matchedTotal == 0)
+            Console.WriteLine($"No events matched range {fromTickInclusive}..{toTickInclusive}" + (allowedKinds is null || allowedKinds.Count == 0 ? "" : $" and filter [{string.Join(",", allowedKinds)}]"));
     }
 
     private static string NormalizePayload(string s)
