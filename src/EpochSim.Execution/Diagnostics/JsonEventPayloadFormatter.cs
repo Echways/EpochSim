@@ -62,7 +62,7 @@ public sealed class JsonEventPayloadFormatter(int maxPairs = 16) : IEventPayload
         }
 
         if (obj.EnumerateObject().Skip(props.Length).Any())
-            sb.Append(", …");
+            sb.Append(", ...");
 
         sb.Append('}');
         return sb.ToString();
@@ -71,7 +71,7 @@ public sealed class JsonEventPayloadFormatter(int maxPairs = 16) : IEventPayload
     private static string Quote(string s)
     {
         if (s.Length == 0) return "\"\"";
-        if (s.Length > 120) s = s.Substring(0, 120) + "…";
+        if (s.Length > 120) s = s.Substring(0, 120) + "...";
         return "\"" + s.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
     }
 }

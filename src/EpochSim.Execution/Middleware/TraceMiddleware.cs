@@ -1,4 +1,3 @@
-using EpochSim.Execution.Middleware;
 using EpochSim.Kernel.Messaging;
 using EpochSim.Kernel.Time;
 using EpochSim.Observability.Tracing;

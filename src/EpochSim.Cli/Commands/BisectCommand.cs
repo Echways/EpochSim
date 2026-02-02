@@ -6,131 +6,128 @@ using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
-using EpochSim.Execution.StateFingerprint;
-using EpochSim.Execution.Validation;
 using EpochSim.Kernel.Validation;
 using EpochSim.Samples.Population;
 
-namespace EpochSim.Cli.Commands
+namespace EpochSim.Cli.Commands;
+
+public sealed class BisectCommand : ICliCommand
 {
-    public sealed class BisectCommand : ICliCommand
+    public int Execute(CommandContext ctx, string[] args)
     {
-        public int Execute(CommandContext ctx, string[] args)
+        var runArg = args.Length > 0 ? args[0] : "";
+        var endTickArg = args.Length > 1 ? args[1] : null;
+        var seedArg = args.Length > 3 ? args[3] : null;
+
+        var codec = ctx.Codec;
+        var stateSerializer = ctx.StateSerializer;
+
+        var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
+        var paths = new RunPaths(ctx.Root, runId);
+
+        if (!Directory.Exists(paths.RunDir))
+            throw new DirectoryNotFoundException($"RunDir not found: {paths.RunDir}");
+
+        var meta = RunMetaReader.Read(paths.MetaPath);
+
+        var endTick = endTickArg is not null && CliParsing.TryParseLong(endTickArg, out var et) ? et
+            : (RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500);
+
+        var seed = seedArg is not null && CliParsing.TryParseUlong(seedArg, out var sd) ? sd
+            : (RunMetaReader.TryGetUlong(meta, "seed", out var sm) ? sm : 12345UL);
+
+        if (!File.Exists(paths.EventsPath))
+            throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+
+        if (!Directory.Exists(paths.SnapshotsDir))
+            Directory.CreateDirectory(paths.SnapshotsDir);
+
+        bool FailsUpTo(long probeTick, out InvariantViolationException? ex)
         {
-            var runArg = args.Length > 0 ? args[0] : "";
-            var endTickArg = args.Length > 1 ? args[1] : null;
-            var seedArg = args.Length > 3 ? args[3] : null;
+            var engine = new SimulationEngine<WorldState>();
+            engine.AddSystem(new PopulationSystem());
 
-            var codec = (PopulationEventCodec)ctx.Codec;
-            var stateSerializer = ctx.StateSerializer;
+            var memLog = new InMemoryEventLogMiddleware(codec);
+            engine.AddMiddleware(memLog);
 
-            var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
-            var paths = new RunPaths(ctx.Root, runId);
-
-            if (!Directory.Exists(paths.RunDir))
-                throw new DirectoryNotFoundException($"RunDir not found: {paths.RunDir}");
-
-            var meta = RunMetaReader.Read(paths.MetaPath);
-
-            var endTick = endTickArg is not null && CliParsing.TryParseLong(endTickArg, out var et) ? et
-                : (RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500);
-
-            var seed = seedArg is not null && CliParsing.TryParseUlong(seedArg, out var sd) ? sd
-                : (RunMetaReader.TryGetUlong(meta, "seed", out var sm) ? sm : 12345UL);
-
-            if (!File.Exists(paths.EventsPath))
-                throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
-
-            if (!Directory.Exists(paths.SnapshotsDir))
-                Directory.CreateDirectory(paths.SnapshotsDir);
-
-            bool FailsUpTo(long probeTick, out InvariantViolationException? ex)
+            var invariants = new List<IInvariant<WorldState>>
             {
-                var engine = new SimulationEngine<WorldState>();
-                engine.AddSystem(new PopulationSystem());
+                new PopulationNonNegativeInvariant(),
+                new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
+            };
 
-                var memLog = new InMemoryEventLogMiddleware(codec);
-                engine.AddMiddleware(memLog);
+            var world = new WorldState();
+            engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
 
-                var invariants = new List<IInvariant<WorldState>>
-                {
-                    new PopulationNonNegativeInvariant(),
-                    new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
-                };
-
-                var world = new WorldState();
-                engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
-
-                try
-                {
-                    SnapshotRunner.LoadBestAndReplayTo(
-                        engine: engine,
-                        snapshotsDir: paths.SnapshotsDir,
-                        eventsPath: paths.EventsPath,
-                        serializer: stateSerializer,
-                        codec: codec,
-                        seed: seed,
-                        endTick: probeTick,
-                        newState: () => world);
-
-                    ex = null;
-                    return false;
-                }
-                catch (InvariantViolationException e)
-                {
-                    ex = e;
-                    return true;
-                }
-            }
-
-            Console.WriteLine($"RunDir={paths.RunDir}");
-            Console.WriteLine($"RunId={paths.RunId}");
-            Console.WriteLine($"EndTick={endTick}");
-            Console.WriteLine($"Seed={seed}");
-
-            if (!FailsUpTo(endTick, out var exAtEnd))
+            try
             {
-                Console.WriteLine("NoInvariantViolationUpToEndTick");
-                return 0;
-            }
-
-            var hi = exAtEnd!.Time.Tick;
-            var lo = 0L;
-
-            while (lo < hi)
-            {
-                var mid = lo + ((hi - lo) / 2);
-
-                if (FailsUpTo(mid, out var exMid))
-                    hi = exMid!.Time.Tick;
-                else
-                    lo = mid + 1;
-            }
-
-            FailsUpTo(lo, out var exFinal);
-
-            Console.WriteLine($"FirstViolationTick={lo}");
-
-            if (exFinal is not null)
-            {
-                Console.WriteLine($"Invariant={exFinal.InvariantName}");
-                Console.WriteLine($"Message={exFinal.Detail}");
-
-                var minDir = EpochSim.Execution.Validation.MinReproWriter.Create(
-                    paths: paths,
-                    failureTick: lo,
-                    seed: seed,
-                    endTick: endTick,
-                    invariantName: exFinal.InvariantName,
-                    invariantMessage: exFinal.Detail,
+                SnapshotRunner.LoadBestAndReplayTo(
+                    engine: engine,
+                    snapshotsDir: paths.SnapshotsDir,
+                    eventsPath: paths.EventsPath,
                     serializer: stateSerializer,
-                    newState: () => new WorldState());
+                    codec: codec,
+                    seed: seed,
+                    endTick: probeTick,
+                    newState: () => world);
 
-                Console.WriteLine($"MinReproDir={minDir}");
-                Console.WriteLine("MinReproFiles=snapshot.json,events.jsonl,meta.txt");
+                ex = null;
+                return false;
             }
-
-            return 2;
+            catch (InvariantViolationException e)
+            {
+                ex = e;
+                return true;
+            }
         }
+
+        Console.WriteLine($"RunDir={paths.RunDir}");
+        Console.WriteLine($"RunId={paths.RunId}");
+        Console.WriteLine($"EndTick={endTick}");
+        Console.WriteLine($"Seed={seed}");
+
+        if (!FailsUpTo(endTick, out var exAtEnd))
+        {
+            Console.WriteLine("NoInvariantViolationUpToEndTick");
+            return 0;
+        }
+
+        var hi = exAtEnd!.Time.Tick;
+        var lo = 0L;
+
+        while (lo < hi)
+        {
+            var mid = lo + ((hi - lo) / 2);
+
+            if (FailsUpTo(mid, out var exMid))
+                hi = exMid!.Time.Tick;
+            else
+                lo = mid + 1;
+        }
+
+        FailsUpTo(lo, out var exFinal);
+
+        Console.WriteLine($"FirstViolationTick={lo}");
+
+        if (exFinal is not null)
+        {
+            Console.WriteLine($"Invariant={exFinal.InvariantName}");
+            Console.WriteLine($"Message={exFinal.Detail}");
+
+            var minDir = MinReproWriter.Create(
+                paths: paths,
+                failureTick: lo,
+                seed: seed,
+                endTick: endTick,
+                invariantName: exFinal.InvariantName,
+                invariantMessage: exFinal.Detail,
+                serializer: stateSerializer,
+                newState: () => new WorldState());
+
+            Console.WriteLine($"MinReproDir={minDir}");
+            Console.WriteLine("MinReproFiles=snapshot.json,events.jsonl,meta.txt");
+        }
+
+        return 2;
     }
 }

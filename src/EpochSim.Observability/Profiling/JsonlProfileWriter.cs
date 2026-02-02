@@ -16,9 +16,9 @@ public sealed class JsonlProfileWriter : IDisposable
     {
         _writer.Write("{\"t\":");
         _writer.Write(r.Time.Tick);
-        _writer.Write(",\"system\":\"");
+        _writer.Write(",\"system\":");
         _writer.Write(JsonEscape(r.SystemName));
-        _writer.Write("\",\"elapsed\":");
+        _writer.Write(",\"elapsed\":");
         _writer.Write(r.ElapsedStopwatchTicks);
         _writer.WriteLine("}");
     }

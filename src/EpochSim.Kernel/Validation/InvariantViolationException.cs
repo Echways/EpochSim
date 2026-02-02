@@ -1,6 +1,6 @@
 using EpochSim.Kernel.Time;
 
-namespace EpochSim.Execution.Validation;
+namespace EpochSim.Kernel.Validation;
 
 public sealed class InvariantViolationException(string name, SimTime time, string message)
     : Exception($"Invariant violated: {name} at tick {time.Tick}: {message}")

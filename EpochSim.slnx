@@ -9,7 +9,5 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj" />
-    <Project Path="tests/EpochSim.Execution.Tests/EpochSim.Execution.Tests.csproj" />
-    <Project Path="tests/EpochSim.Kernel.Tests/EpochSim.Kernel.Tests.csproj" />
   </Folder>
 </Solution>

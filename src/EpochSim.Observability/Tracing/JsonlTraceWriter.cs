@@ -1,5 +1,4 @@
 using System.Text;
-using EpochSim.Kernel.Time;
 
 namespace EpochSim.Observability.Tracing;
 
@@ -20,11 +19,11 @@ public sealed class JsonlTraceWriter : IDisposable
 
         _writer.Write("{\"t\":");
         _writer.Write(r.Time.Tick);
-        _writer.Write(",\"type\":\"");
+        _writer.Write(",\"type\":");
         _writer.Write(JsonEscape(r.Type));
-        _writer.Write("\",\"name\":\"");
+        _writer.Write(",\"name\":");
         _writer.Write(JsonEscape(r.Name));
-        _writer.Write("\",\"dur\":");
+        _writer.Write(",\"dur\":");
         _writer.Write(dur);
         _writer.Write(",\"detail\":");
         _writer.Write(detail);
