@@ -6,7 +6,7 @@ using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
 
 [MemoryDiagnoser]
-public sealed class EngineBenchmarks
+public class EngineBenchmarks
 {
     [Params(500, 2000)]
     public int EndTick { get; set; }
