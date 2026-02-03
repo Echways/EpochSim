@@ -33,8 +33,9 @@ public sealed class InspectRunCommand : ICliCommand
             Console.WriteLine("Meta: missing");
         }
 
-        if (File.Exists(paths.EventsPath))
-            Console.WriteLine($"EventsLines={File.ReadLines(paths.EventsPath).LongCount()}");
+        var eventsPath = paths.ResolveEventsPath();
+        if (File.Exists(eventsPath))
+            Console.WriteLine($"EventsLines={CountLines(eventsPath)}");
         else
             Console.WriteLine("Events: missing");
 
@@ -45,12 +46,12 @@ public sealed class InspectRunCommand : ICliCommand
 
         if (Directory.Exists(paths.SnapshotsDir))
         {
-            var snaps = Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").ToArray();
-            Console.WriteLine($"Snapshots={snaps.Length}");
-            if (snaps.Length > 0)
+            var snapshots = Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").ToArray();
+            Console.WriteLine($"Snapshots={snapshots.Length}");
+            if (snapshots.Length > 0)
             {
-                var last = snaps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
-                Console.WriteLine($"LastSnapshot={last.Name}");
+                var lastSnapshot = snapshots.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                Console.WriteLine($"LastSnapshot={lastSnapshot.Name}");
             }
         }
         else
@@ -60,12 +61,12 @@ public sealed class InspectRunCommand : ICliCommand
 
         if (Directory.Exists(paths.DumpsDir))
         {
-            var dumps = Directory.EnumerateFiles(paths.DumpsDir, "violation-meta-*.txt").ToArray();
-            Console.WriteLine($"DumpMetas={dumps.Length}");
-            if (dumps.Length > 0)
+            var dumpMetas = Directory.EnumerateFiles(paths.DumpsDir, "violation-meta-*.txt").ToArray();
+            Console.WriteLine($"DumpMetas={dumpMetas.Length}");
+            if (dumpMetas.Length > 0)
             {
-                var last = dumps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
-                Console.WriteLine($"LastDumpMeta={last.Name}");
+                var lastDump = dumpMetas.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                Console.WriteLine($"LastDumpMeta={lastDump.Name}");
             }
         }
         else
@@ -76,10 +77,10 @@ public sealed class InspectRunCommand : ICliCommand
         var minDir = Path.Combine(paths.RunDir, "minrepro");
         if (Directory.Exists(minDir))
         {
-            var reps = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
-            Console.WriteLine($"MinRepros={reps.Length}");
-            if (reps.Length > 0)
-                Console.WriteLine($"LastMinRepro={reps[0]}");
+            var repros = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
+            Console.WriteLine($"MinRepros={repros.Length}");
+            if (repros.Length > 0)
+                Console.WriteLine($"LastMinRepro={repros[0]}");
         }
         else
         {
@@ -87,5 +88,19 @@ public sealed class InspectRunCommand : ICliCommand
         }
 
         return 0;
+    }
+
+    private static long CountLines(string path)
+    {
+        using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        Stream stream = fileStream;
+        if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            stream = new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Decompress);
+
+        using var reader = new StreamReader(stream);
+        long count = 0;
+        while (reader.ReadLine() is not null)
+            count++;
+        return count;
     }
 }

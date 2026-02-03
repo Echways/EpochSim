@@ -7,11 +7,32 @@ public sealed class RunPaths(string rootDir, string runId)
 
     public string RunDir => Path.Combine(RootDir, RunId);
     public string EventsPath => Path.Combine(RunDir, "events.jsonl");
+    public string EventsPathGz => Path.Combine(RunDir, "events.jsonl.gz");
     public string TracePath => Path.Combine(RunDir, "trace.jsonl");
+    public string TracePathGz => Path.Combine(RunDir, "trace.jsonl.gz");
     public string StateFpPath => Path.Combine(RunDir, "statefp.jsonl");
     public string SnapshotsDir => Path.Combine(RunDir, "snapshots");
     public string DumpsDir => Path.Combine(RunDir, "dumps");
     public string MetaPath => Path.Combine(RunDir, "meta.txt");
+    public string ManifestPath => Path.Combine(RunDir, "manifest.json");
+
+    public string ResolveEventsPath()
+    {
+        if (File.Exists(EventsPath))
+            return EventsPath;
+        if (File.Exists(EventsPathGz))
+            return EventsPathGz;
+        return EventsPath;
+    }
+
+    public string ResolveTracePath()
+    {
+        if (File.Exists(TracePath))
+            return TracePath;
+        if (File.Exists(TracePathGz))
+            return TracePathGz;
+        return TracePath;
+    }
 
     public void Ensure()
     {

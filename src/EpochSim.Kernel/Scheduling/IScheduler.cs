@@ -5,7 +5,7 @@ namespace EpochSim.Kernel.Scheduling;
 
 public interface IScheduler
 {
-    void Schedule(SimTime time, IEvent ev);
-    bool TryDequeue(out ScheduledItem item);
-    SimTime? PeekTime();
+    void ScheduleAt(SimTime time, IEvent ev);
+    void ScheduleNextTick(IEvent ev);
+    void ScheduleInTicks(long deltaTicks, IEvent ev);
 }

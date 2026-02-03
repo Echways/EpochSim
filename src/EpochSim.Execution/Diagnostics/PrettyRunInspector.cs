@@ -23,8 +23,22 @@ public static class PrettyRunInspector
             Console.WriteLine();
         }
 
-        PrintFileInfo("events.jsonl", paths.EventsPath);
-        PrintFileInfo("trace.jsonl", paths.TracePath);
+        if (File.Exists(paths.ManifestPath))
+        {
+            Console.WriteLine("Manifest:");
+            Console.WriteLine(File.ReadAllText(paths.ManifestPath).TrimEnd());
+            Console.WriteLine();
+        }
+        else
+        {
+            Console.WriteLine("Manifest: missing");
+            Console.WriteLine();
+        }
+
+        var eventsPath = paths.ResolveEventsPath();
+        var tracePath = paths.ResolveTracePath();
+        PrintFileInfo(Path.GetFileName(eventsPath), eventsPath);
+        PrintFileInfo(Path.GetFileName(tracePath), tracePath);
         PrintFileInfo("statefp.jsonl", paths.StateFpPath);
         Console.WriteLine();
 
@@ -108,7 +122,9 @@ public static class PrettyRunInspector
     private static long SafeCountLines(string path)
     {
         long n = 0;
-        foreach (var _ in File.ReadLines(path))
+        using var stream = OpenReadStream(path);
+        using var reader = new StreamReader(stream);
+        while (reader.ReadLine() is not null)
             n++;
         return n;
     }
@@ -116,11 +132,21 @@ public static class PrettyRunInspector
     private static string? ReadLastNonEmptyLine(string path)
     {
         string? last = null;
-        foreach (var line in File.ReadLines(path))
+        using var stream = OpenReadStream(path);
+        using var reader = new StreamReader(stream);
+        while (reader.ReadLine() is { } line)
         {
             if (!string.IsNullOrWhiteSpace(line))
                 last = line;
         }
         return last;
+    }
+
+    private static Stream OpenReadStream(string path)
+    {
+        var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            return new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Decompress);
+        return fileStream;
     }
 }

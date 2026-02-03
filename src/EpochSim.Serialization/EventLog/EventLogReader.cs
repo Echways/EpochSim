@@ -2,27 +2,44 @@ namespace EpochSim.Serialization.EventLog;
 
 public static class EventLogReader
 {
-    public static IReadOnlyList<EventLogEntry> ReadAll(string path)
+    public static IEnumerable<EventLogEntryV2> ReadStream(string path)
     {
-        var list = new List<EventLogEntry>();
+        using var stream = OpenRead(path);
+        using var reader = new StreamReader(stream);
 
-        foreach (var line in File.ReadLines(path))
+        while (true)
         {
+            var line = reader.ReadLine();
+            if (line is null) yield break;
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var tick = EventLogLine.ReadTick(line);
-            var kind = EventLogLine.ReadKind(line);
-            var payload = EventLogLine.ReadPayload(line);
-
-            list.Add(new EventLogEntry(tick, kind, payload));
+            yield return EventLogLine.ReadEntry(line);
         }
-
-        return list;
     }
 
-    public static IReadOnlyList<EventLogEntry> ReadAfterTick(string path, long tickExclusive)
+    public static IReadOnlyList<EventLogEntryV2> ReadAll(string path)
+        => ReadStream(path).ToArray();
+
+    public static IReadOnlyList<EventLogEntryV2> ReadAfterTick(string path, long tickExclusive)
+        => ReadStream(path).Where(e => e.Tick > tickExclusive).ToArray();
+
+    private static Stream OpenRead(string path)
     {
-        var all = ReadAll(path);
-        return all.Where(e => e.Tick > tickExclusive).ToArray();
+        var resolvedPath = ResolvePath(path);
+        var fileStream = new FileStream(resolvedPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (resolvedPath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            return new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Decompress);
+        return fileStream;
+    }
+
+    private static string ResolvePath(string path)
+    {
+        if (File.Exists(path))
+            return path;
+
+        if (!path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) && File.Exists(path + ".gz"))
+            return path + ".gz";
+
+        return path;
     }
 }

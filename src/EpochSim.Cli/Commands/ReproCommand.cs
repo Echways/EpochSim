@@ -24,14 +24,15 @@ public sealed class ReproCommand : ICliCommand
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = new RunPaths(ctx.Root, runId);
+        var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
         var minRoot = Path.Combine(paths.RunDir, "minrepro");
         if (!Directory.Exists(minRoot))
             throw new DirectoryNotFoundException($"minrepro not found: {minRoot}");
 
         long? tick = null;
-        if (args.Length > 1 && CliParsing.TryParseLong(args[1], out var t))
-            tick = t;
+        if (args.Length > 1 && CliParsing.TryParseLong(args[1], out var tickArg))
+            tick = tickArg;
 
         var minDir = tick.HasValue
             ? Path.Combine(minRoot, $"tick-{tick.Value}")
@@ -54,18 +55,20 @@ public sealed class ReproCommand : ICliCommand
             seed = seedOverride;
         else if (RunMetaReader.TryGetUlong(meta, "seed", out var seedFromMeta))
             seed = seedFromMeta;
+        else if (manifest is not null)
+            seed = manifest.Seed;
         else
             seed = 12345UL;
 
-        var snapPath = Path.Combine(minDir, "snapshot.json");
+        var snapshotPath = Path.Combine(minDir, "snapshot.json");
         var eventsPath = Path.Combine(minDir, "events.jsonl");
 
-        if (!File.Exists(snapPath))
-            throw new FileNotFoundException($"snapshot.json not found: {snapPath}");
+        if (!File.Exists(snapshotPath))
+            throw new FileNotFoundException($"snapshot.json not found: {snapshotPath}");
         if (!File.Exists(eventsPath))
             throw new FileNotFoundException($"events.jsonl not found: {eventsPath}");
 
-        var snap = SnapshotReader.Read(snapPath);
+        var snap = SnapshotReader.Read(snapshotPath);
         var world = stateSerializer.Deserialize(snap.StateJson);
 
         var engine = new SimulationEngine<WorldState>();
@@ -84,15 +87,14 @@ public sealed class ReproCommand : ICliCommand
 
         try
         {
-            var entries = EventLogReader.ReadAll(eventsPath);
-            var index = new EventLogIndex(entries);
+            var entries = EventLogReader.ReadStream(eventsPath);
 
-            engine.ReplayFromLog(
+            engine.ReplayFromLogStream(
                 state: world,
                 seed: seed,
                 start: new SimTime(snapshotTick + 1),
                 endInclusive: new SimTime(failureTick),
-                index: index,
+                entries: entries,
                 codec: codec);
 
             Console.WriteLine($"RunDir={paths.RunDir}");

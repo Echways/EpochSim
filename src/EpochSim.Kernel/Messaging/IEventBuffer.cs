@@ -1,7 +1,6 @@
 namespace EpochSim.Kernel.Messaging;
 
-public interface IEventBuffer
+public interface IEventBuffer : IEventEmitter
 {
-    void Emit(IEvent ev);
     IReadOnlyList<IEvent> Drain();
 }
