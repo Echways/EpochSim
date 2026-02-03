@@ -14,45 +14,48 @@ public sealed class TimelineCommand : ICliCommand
         var runId = runParse.RunId ?? CliParsing.ResolveRunIdWithEvents(ctx.Root, "");
         var paths = CliParsing.Paths(ctx.Root, runId);
 
-        if (!File.Exists(paths.EventsPath))
-            throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+        var eventsPath = paths.ResolveEventsPath();
+        if (!File.Exists(eventsPath))
+            throw new FileNotFoundException($"events log not found: {eventsPath}");
 
         var meta = RunMetaReader.Read(paths.MetaPath);
+        var manifest = RunManifestReader.TryRead(paths.ManifestPath);
         var endFromMeta = RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500;
+        var endFromManifest = manifest?.EndTick ?? endFromMeta;
 
-        var pos = runParse.NextIndex;
+        var argIndex = runParse.NextIndex;
 
-        long? from = null;
-        long? to = null;
+        long? fromTick = null;
+        long? toTick = null;
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseLong(args[pos], out var f))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseLong(args[argIndex], out var f))
         {
-            from = f;
-            pos++;
+            fromTick = f;
+            argIndex++;
         }
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseLong(args[pos], out var t))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseLong(args[argIndex], out var t))
         {
-            to = t;
-            pos++;
+            toTick = t;
+            argIndex++;
         }
 
         var maxPerTick = 50;
         var maxPayload = 120;
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseInt(args[pos], out var mpt))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseInt(args[argIndex], out var mpt))
         {
             maxPerTick = mpt;
-            pos++;
+            argIndex++;
         }
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseInt(args[pos], out var mp))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseInt(args[argIndex], out var mp))
         {
             maxPayload = mp;
-            pos++;
+            argIndex++;
         }
 
-        var kindsFilter = CliParsing.ParseKindsOptions(args, pos);
+        var kindsFilter = CliParsing.ParseKindsOptions(args, argIndex);
 
         var formatter = new CompositeEventPayloadFormatter(
             new PopulationEventPayloadFormatter(),
@@ -62,10 +65,10 @@ public sealed class TimelineCommand : ICliCommand
         Console.WriteLine($"RunId={paths.RunId}");
         Console.WriteLine();
 
-        var from2 = from ?? Math.Max(0, endFromMeta - 50);
-        var to2 = to ?? endFromMeta;
+        var resolvedFrom = fromTick ?? Math.Max(0, endFromManifest - 50);
+        var resolvedTo = toTick ?? endFromManifest;
 
-        TimelineDumper.Dump(paths.EventsPath, from2, to2, maxPerTick, maxPayload, formatter, kindsFilter);
+        TimelineDumper.Dump(eventsPath, resolvedFrom, resolvedTo, maxPerTick, maxPayload, formatter, kindsFilter);
 
         return 0;
     }

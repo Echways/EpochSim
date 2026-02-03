@@ -10,4 +10,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/EpochSim.Benchmarks/EpochSim.Benchmarks.csproj" />
+  </Folder>
 </Solution>

@@ -30,19 +30,17 @@ public static class EventLogStatsComputer
         long minTick = long.MaxValue;
         long maxTick = long.MinValue;
 
-        foreach (var line in File.ReadLines(eventsPath))
+        foreach (var entry in EventLogReader.ReadStream(eventsPath))
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            var tick = EventLogLine.ReadTick(line);
+            var tick = entry.Tick;
             if (fromTickInclusive.HasValue && tick < fromTickInclusive.Value) continue;
-            if (toTickInclusive.HasValue && tick > toTickInclusive.Value) continue;
+            if (toTickInclusive.HasValue && tick > toTickInclusive.Value) break;
 
-            var kind = EventLogLine.ReadKind(line);
+            var kind = entry.Kind;
             if (allowedKinds is not null && allowedKinds.Count > 0 && !allowedKinds.Contains(kind))
                 continue;
 
-            var payload = EventLogLine.ReadPayload(line);
+            var payload = entry.PayloadJson;
 
             total++;
 
@@ -130,7 +128,7 @@ public static class EventLogStatsComputer
                 map[iv] = c + 1;
             }
         }
-        catch
+        catch (JsonException)
         {
         }
     }

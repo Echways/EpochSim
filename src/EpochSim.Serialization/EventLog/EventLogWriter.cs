@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Compression;
 
 namespace EpochSim.Serialization.EventLog;
 
@@ -8,18 +9,22 @@ public sealed class EventLogWriter : IDisposable
 
     public EventLogWriter(string path, bool append = false)
     {
-        var fs = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
-        _writer = new StreamWriter(fs, new UTF8Encoding(false));
+        var fileStream = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
+        Stream stream = fileStream;
+        if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            stream = new GZipStream(fileStream, CompressionLevel.Optimal);
+
+        _writer = new StreamWriter(stream, new UTF8Encoding(false));
     }
 
-    public void Write(long tick, string kind, string payload)
+    public void Write(long tick, string kind, string payloadJson)
     {
         _writer.Write("{\"t\":");
         _writer.Write(tick);
         _writer.Write(",\"kind\":");
         _writer.Write(JsonEscape(kind));
         _writer.Write(",\"payload\":");
-        _writer.Write(JsonEscape(payload));
+        _writer.Write(payloadJson);
         _writer.WriteLine("}");
     }
 

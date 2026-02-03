@@ -3,26 +3,16 @@ using EpochSim.Kernel.Time;
 
 namespace EpochSim.Samples.Population;
 
-public sealed class GrowPopulationHandler : ICommandHandler<WorldState>
+public sealed class GrowPopulationHandler : ICommandHandler<WorldState, GrowPopulationCommand>
 {
-    public Type CommandType => typeof(GrowPopulationCommand);
-
-    public void Handle(WorldState state, ICommand command, IEventBuffer events)
-    {
-        var c = (GrowPopulationCommand)command;
-        events.Emit(new PopulationDeltaEvent(c.Delta));
-    }
+    public void Handle(WorldState state, GrowPopulationCommand command, IEventBuffer events)
+        => events.Emit(new PopulationDeltaEvent(command.Delta));
 }
 
-public sealed class ScheduleFireHandler : ICommandHandler<WorldState>
+public sealed class ScheduleFireHandler : ICommandHandler<WorldState, ScheduleFireCommand>
 {
-    public Type CommandType => typeof(ScheduleFireCommand);
-
-    public void Handle(WorldState state, ICommand command, IEventBuffer events)
-    {
-        var c = (ScheduleFireCommand)command;
-        events.Emit(new FireScheduledEvent(new SimTime(c.AtTick), c.Damage));
-    }
+    public void Handle(WorldState state, ScheduleFireCommand command, IEventBuffer events)
+        => events.Emit(new FireScheduledEvent(new SimTime(command.AtTick), command.Damage));
 }
 
 public sealed record PopulationDeltaEvent(int Delta) : IEvent

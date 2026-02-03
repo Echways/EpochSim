@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Compression;
 
 namespace EpochSim.Observability.Tracing;
 
@@ -8,8 +9,12 @@ public sealed class JsonlTraceWriter : IDisposable
 
     public JsonlTraceWriter(string path, bool append = false)
     {
-        var fs = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
-        _writer = new StreamWriter(fs, new UTF8Encoding(false));
+        var fileStream = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
+        Stream stream = fileStream;
+        if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            stream = new GZipStream(fileStream, CompressionLevel.Optimal);
+
+        _writer = new StreamWriter(stream, new UTF8Encoding(false));
     }
 
     public void Write(in TraceRecord r)

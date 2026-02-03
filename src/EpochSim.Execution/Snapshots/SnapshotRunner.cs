@@ -12,35 +12,33 @@ public static class SnapshotRunner
         string snapshotsDir,
         string eventsPath,
         IStateSerializer<TState> serializer,
-        IEventCodec codec,
+        IEventCodecV2 codec,
         ulong seed,
         long endTick,
         Func<TState> newState)
     {
-        var snapPath = SnapshotLocator.FindBestSnapshot(snapshotsDir, endTick);
+        var snapshotPath = SnapshotLocator.FindBestSnapshot(snapshotsDir, endTick);
 
         TState state;
         long startTick;
 
-        if (snapPath is null)
+        if (snapshotPath is null)
         {
             state = newState();
             startTick = 0;
         }
         else
         {
-            var snap = SnapshotReader.Read(snapPath);
+            var snap = SnapshotReader.Read(snapshotPath);
             state = serializer.Deserialize(snap.StateJson);
             startTick = snap.Tick + 1;
         }
 
         var entries = startTick == 0
-            ? EventLogReader.ReadAll(eventsPath)
-            : EventLogReader.ReadAfterTick(eventsPath, startTick - 1);
+            ? EventLogReader.ReadStream(eventsPath)
+            : EventLogReader.ReadStream(eventsPath).Where(e => e.Tick > startTick - 1);
 
-        var index = new EventLogIndex(entries);
-
-        engine.ReplayFromLog(state, seed, new SimTime(startTick), new SimTime(endTick), index, codec);
+        engine.ReplayFromLogStream(state, seed, new SimTime(startTick), new SimTime(endTick), entries, codec);
         return state;
     }
 }

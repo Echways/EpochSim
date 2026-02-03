@@ -27,12 +27,17 @@ public sealed class VerifyRunCommand : ICliCommand
             throw new FileNotFoundException($"statefp.jsonl not found: {paths.StateFpPath}");
 
         var meta = RunMetaReader.Read(paths.MetaPath);
+        var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
-        var endTick = args.Length > 1 && CliParsing.TryParseLong(args[1], out var et) ? et
-            : (RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500);
+        var endTick = args.Length > 1 && CliParsing.TryParseLong(args[1], out var endTickArg) ? endTickArg
+            : (manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500));
 
-        var seed = args.Length > 3 && CliParsing.TryParseUlong(args[3], out var sd) ? sd
-            : (RunMetaReader.TryGetUlong(meta, "seed", out var sm) ? sm : 12345UL);
+        var seed = args.Length > 3 && CliParsing.TryParseUlong(args[3], out var seedArg) ? seedArg
+            : (manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL));
+
+        var fingerprintEvery = manifest?.FingerprintEvery
+            ?? (RunMetaReader.TryGetLong(meta, "fingerprintEvery", out var fingerprintEveryMeta) ? fingerprintEveryMeta : 1);
+        if (fingerprintEvery <= 0) fingerprintEvery = 1;
 
         var expected = JsonlStateFingerprintWriter.ReadAll(paths.StateFpPath);
 
@@ -41,19 +46,19 @@ public sealed class VerifyRunCommand : ICliCommand
 
         var sink = new InMemoryStateFingerprintSink();
         var tmpState = new WorldState();
-        engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(tmpState, stateSerializer, sink));
+        engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(tmpState, stateSerializer, sink, fingerprintEvery));
 
         var replayed = SnapshotRunner.LoadBestAndReplayTo(
             engine: engine,
             snapshotsDir: paths.SnapshotsDir,
-            eventsPath: paths.EventsPath,
+            eventsPath: paths.ResolveEventsPath(),
             serializer: stateSerializer,
             codec: codec,
             seed: seed,
             endTick: endTick,
             newState: () => tmpState);
 
-        var mismatch = FindFirstMismatch(expected, sink.Records, endTick);
+        var mismatch = FindFirstMismatch(expected, sink.Records, endTick, fingerprintEvery);
 
         Console.WriteLine($"RunDir={paths.RunDir}");
         Console.WriteLine($"RunId={paths.RunId}");
@@ -76,7 +81,8 @@ public sealed class VerifyRunCommand : ICliCommand
     private static (long Tick, string Expected, string Actual)? FindFirstMismatch(
         Dictionary<long, string> expected,
         IReadOnlyList<(long Tick, string Hash)> actual,
-        long endTick)
+        long endTick,
+        long fingerprintEvery)
     {
         var actualMap = new Dictionary<long, string>();
         foreach (var r in actual)
@@ -84,20 +90,23 @@ public sealed class VerifyRunCommand : ICliCommand
 
         for (var t = 0L; t <= endTick; t++)
         {
-            var hasE = expected.TryGetValue(t, out var eRaw);
-            var hasA = actualMap.TryGetValue(t, out var aRaw);
+            if (fingerprintEvery > 1 && t % fingerprintEvery != 0)
+                continue;
 
-            var e = eRaw ?? "<null>";
-            var a = aRaw ?? "<null>";
+            var hasE = expected.TryGetValue(t, out var expectedRaw);
+            var hasA = actualMap.TryGetValue(t, out var actualRaw);
+
+            var expectedValue = expectedRaw ?? "<null>";
+            var actualValue = actualRaw ?? "<null>";
 
             if (!hasE && hasA)
-                return (t, "<missing>", a);
+                return (t, "<missing>", actualValue);
 
             if (hasE && !hasA)
-                return (t, e, "<missing>");
+                return (t, expectedValue, "<missing>");
 
-            if (hasE && hasA && !string.Equals(e, a, StringComparison.Ordinal))
-                return (t, e, a);
+            if (hasE && hasA && !string.Equals(expectedValue, actualValue, StringComparison.Ordinal))
+                return (t, expectedValue, actualValue);
         }
 
         return null;

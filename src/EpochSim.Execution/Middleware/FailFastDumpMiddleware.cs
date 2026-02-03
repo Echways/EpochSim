@@ -8,7 +8,7 @@ namespace EpochSim.Execution.Middleware;
 public sealed class FailFastDumpMiddleware<TState>(
     TState state,
     Func<long> currentTickProvider,
-    Func<IReadOnlyList<EventLogEntry>> eventLogProvider,
+    Func<IReadOnlyList<EventLogEntryV2>> eventLogProvider,
     IStateSerializer<TState> serializer,
     string dumpDirectory)
 {
@@ -29,7 +29,7 @@ public sealed class FailFastDumpMiddleware<TState>(
             for (int i = 0; i < entries.Count; i++)
             {
                 var e = entries[i];
-                writer.Write(e.Tick, e.Kind, e.Payload);
+                writer.Write(e.Tick, e.Kind, e.PayloadJson);
             }
         }
 

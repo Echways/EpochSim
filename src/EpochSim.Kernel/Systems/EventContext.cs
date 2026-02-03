@@ -10,11 +10,13 @@ public sealed class EventContext<TState>(
     TState state,
     IScheduler scheduler,
     ICommandBuffer commands,
+    IEventEmitter events,
     IRng rng)
 {
     public SimTime Time { get; } = time;
     public TState State { get; } = state;
     public IScheduler Scheduler { get; } = scheduler;
     public ICommandBuffer Commands { get; } = commands;
+    public IEventEmitter Events { get; } = events;
     public IRng Rng { get; } = rng;
 }

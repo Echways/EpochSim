@@ -26,7 +26,7 @@ public sealed class PopulationSystem : ISystem<WorldState>
                 break;
 
             case FireScheduledEvent fs:
-                ctx.Scheduler.Schedule(fs.At, new FireEvent(fs.Damage));
+                ctx.Scheduler.ScheduleAt(fs.At, new FireEvent(fs.Damage));
                 break;
 
             case FireEvent fire:

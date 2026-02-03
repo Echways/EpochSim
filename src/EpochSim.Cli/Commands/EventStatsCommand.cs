@@ -12,36 +12,37 @@ public sealed class EventStatsCommand : ICliCommand
         var runId = runParse.RunId ?? CliParsing.ResolveRunIdWithEvents(ctx.Root, "");
         var paths = CliParsing.Paths(ctx.Root, runId);
 
-        var pos = runParse.NextIndex;
+        var argIndex = runParse.NextIndex;
 
         var topN = 20;
         long? fromTick = null;
         long? toTick = null;
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseInt(args[pos], out var tn))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseInt(args[argIndex], out var topArg))
         {
-            topN = tn;
-            pos++;
+            topN = topArg;
+            argIndex++;
         }
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseLong(args[pos], out var ft))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseLong(args[argIndex], out var fromArg))
         {
-            fromTick = ft;
-            pos++;
+            fromTick = fromArg;
+            argIndex++;
         }
 
-        if (args.Length > pos && !CliParsing.IsOption(args[pos]) && CliParsing.TryParseLong(args[pos], out var tt))
+        if (args.Length > argIndex && !CliParsing.IsOption(args[argIndex]) && CliParsing.TryParseLong(args[argIndex], out var toArg))
         {
-            toTick = tt;
-            pos++;
+            toTick = toArg;
+            argIndex++;
         }
 
-        var kindsFilter = CliParsing.ParseKindsOptions(args, pos);
+        var kindsFilter = CliParsing.ParseKindsOptions(args, argIndex);
 
-        if (!File.Exists(paths.EventsPath))
-            throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+        var eventsPath = paths.ResolveEventsPath();
+        if (!File.Exists(eventsPath))
+            throw new FileNotFoundException($"events log not found: {eventsPath}");
 
-        var stats = EventLogStatsComputer.Compute(paths.EventsPath, fromTick, toTick, topN, kindsFilter);
+        var stats = EventLogStatsComputer.Compute(eventsPath, fromTick, toTick, topN, kindsFilter);
 
         Console.WriteLine($"RunDir={paths.RunDir}");
         Console.WriteLine($"RunId={paths.RunId}");

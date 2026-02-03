@@ -27,6 +27,11 @@ public sealed class CompositeEventCodec(params IEventCodec[] codecs) : IEventCod
                 return true;
         }
 
+        return Fail(out ev);
+    }
+
+    private static bool Fail(out IEvent ev)
+    {
         ev = default!;
         return false;
     }

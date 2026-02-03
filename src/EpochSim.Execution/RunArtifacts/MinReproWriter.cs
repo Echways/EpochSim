@@ -1,6 +1,6 @@
+using System.Text.Json;
 using EpochSim.Serialization.Snapshots;
 using EpochSim.Serialization.State;
-using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Execution.RunArtifacts;
 
@@ -37,7 +37,7 @@ public static class MinReproWriter
         }
 
         var eventsOut = Path.Combine(dir, "events.jsonl");
-        WriteEventsTail(paths.EventsPath, eventsOut, snapTick, failureTick);
+        WriteEventsTail(paths.ResolveEventsPath(), eventsOut, snapTick, failureTick);
 
         var metaOut = Path.Combine(dir, "meta.txt");
         File.WriteAllText(metaOut,
@@ -54,16 +54,29 @@ public static class MinReproWriter
 
     private static void WriteEventsTail(string eventsPath, string outPath, long tickExclusive, long tickInclusive)
     {
-        using var fs = new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-        using var w = new StreamWriter(fs, new System.Text.UTF8Encoding(false));
+        using var fileStream = new FileStream(outPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+        using var writer = new StreamWriter(fileStream, new System.Text.UTF8Encoding(false));
 
-        foreach (var line in File.ReadLines(eventsPath))
+        using var input = OpenRead(eventsPath);
+        using var reader = new StreamReader(input);
+
+        while (reader.ReadLine() is { } line)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var t = EventLogLine.ReadTick(line);
-            if (t > tickExclusive && t <= tickInclusive)
-                w.WriteLine(line);
+            using var doc = JsonDocument.Parse(line);
+            if (!doc.RootElement.TryGetProperty("t", out var tProp)) continue;
+            var tick = tProp.GetInt64();
+            if (tick > tickExclusive && tick <= tickInclusive)
+                writer.WriteLine(line);
         }
+    }
+
+    private static Stream OpenRead(string path)
+    {
+        var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+            return new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Decompress);
+        return fileStream;
     }
 }

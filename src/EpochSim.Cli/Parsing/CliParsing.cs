@@ -20,49 +20,49 @@ public static class CliParsing
         if (args.Length <= 0)
             return (null, 0);
 
-        var a = args[0];
+        var firstArg = args[0];
 
-        if (IsOption(a))
+        if (IsOption(firstArg))
             return (null, 0);
 
-        if (long.TryParse(a, out _))
+        if (long.TryParse(firstArg, out _))
             return (null, 0);
 
-        if (int.TryParse(a, out _))
+        if (int.TryParse(firstArg, out _))
             return (null, 0);
 
-        if (ulong.TryParse(a, out _))
+        if (ulong.TryParse(firstArg, out _))
             return (null, 0);
 
-        return (NormalizeRunId(a), 1);
+        return (NormalizeRunId(firstArg), 1);
     }
 
     public static HashSet<string>? ParseKindsOptions(string[] args, int startIndex)
     {
-        HashSet<string>? set = null;
+        HashSet<string>? kinds = null;
 
         for (var i = startIndex; i < args.Length; i++)
         {
-            var a = args[i];
-            if (!IsOption(a)) continue;
+            var arg = args[i];
+            if (!IsOption(arg)) continue;
 
-            if (string.Equals(a, "--only", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(a, "--kind", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(arg, "--only", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(arg, "--kind", StringComparison.OrdinalIgnoreCase))
             {
                 if (i + 1 >= args.Length) continue;
-                var v = args[i + 1];
+                var value = args[i + 1];
                 i++;
 
-                if (string.IsNullOrWhiteSpace(v)) continue;
+                if (string.IsNullOrWhiteSpace(value)) continue;
 
-                set ??= new HashSet<string>(StringComparer.Ordinal);
+                kinds ??= new HashSet<string>(StringComparer.Ordinal);
 
-                foreach (var part in v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                    set.Add(part);
+                foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    kinds.Add(part);
             }
         }
 
-        return set;
+        return kinds;
     }
 
     public static string ResolveLatestRunId(string root)
@@ -71,8 +71,8 @@ public static class CliParsing
             throw new DirectoryNotFoundException($"Artifacts root not found: {root}");
 
         var dirs = Directory.GetDirectories(root)
-            .Select(d => new DirectoryInfo(d))
-            .OrderByDescending(d => d.Name)
+            .Select(path => new DirectoryInfo(path))
+            .OrderByDescending(dir => dir.Name)
             .ToArray();
 
         if (dirs.Length == 0)
@@ -90,8 +90,9 @@ public static class CliParsing
             var id = NormalizeRunId(runArg);
             var dir = Path.Combine(root, id);
             var events = Path.Combine(dir, "events.jsonl");
-            if (!File.Exists(events))
-                throw new FileNotFoundException($"events.jsonl not found for run: {dir}");
+            var eventsGz = events + ".gz";
+            if (!File.Exists(events) && !File.Exists(eventsGz))
+                throw new FileNotFoundException($"events log not found for run: {dir}");
             return id;
         }
 
@@ -99,24 +100,25 @@ public static class CliParsing
             throw new DirectoryNotFoundException($"Artifacts root not found: {root}");
 
         var dirs = Directory.GetDirectories(root)
-            .Select(d => new DirectoryInfo(d))
-            .OrderByDescending(d => d.Name);
+            .Select(path => new DirectoryInfo(path))
+            .OrderByDescending(dir => dir.Name);
 
-        foreach (var d in dirs)
+        foreach (var dir in dirs)
         {
-            var events = Path.Combine(d.FullName, "events.jsonl");
-            if (File.Exists(events))
-                return d.Name;
+            var events = Path.Combine(dir.FullName, "events.jsonl");
+            var eventsGz = events + ".gz";
+            if (File.Exists(events) || File.Exists(eventsGz))
+                return dir.Name;
         }
 
-        throw new InvalidOperationException($"No runs with events.jsonl found in {root}");
+        throw new InvalidOperationException($"No runs with events logs found in {root}");
     }
 
     public static string ResolveLatestMinRepro(string minRoot)
     {
         var dirs = Directory.GetDirectories(minRoot)
-            .Select(d => new DirectoryInfo(d))
-            .OrderByDescending(d => d.Name)
+            .Select(path => new DirectoryInfo(path))
+            .OrderByDescending(dir => dir.Name)
             .ToArray();
 
         if (dirs.Length == 0)

@@ -1,5 +1,5 @@
 using System.Text;
-using EpochSim.Serialization.EventLog;
+using System.Text.Json;
 
 namespace EpochSim.Execution.StateFingerprint;
 
@@ -33,8 +33,13 @@ public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprint
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var t = EventLogLine.ReadLongField(line, "\"t\":");
-            var h = EventLogLine.ReadStringField(line, "\"h\":");
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("t", out var tProp) || !root.TryGetProperty("h", out var hProp))
+                continue;
+
+            var t = tProp.GetInt64();
+            var h = hProp.GetString() ?? "";
             dict[t] = h;
         }
         return dict;

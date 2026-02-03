@@ -1,7 +1,6 @@
 namespace EpochSim.Kernel.Messaging;
 
-public interface ICommandHandler<TState>
+public interface ICommandHandler<TState, in TCommand> where TCommand : ICommand
 {
-    Type CommandType { get; }
-    void Handle(TState state, ICommand command, IEventBuffer events);
+    void Handle(TState state, TCommand command, IEventBuffer events);
 }

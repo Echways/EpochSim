@@ -15,10 +15,13 @@ public sealed class ReplayTests
         try
         {
             var (p1, f1) = RunAndWrite(tmp);
-            var (p2, f2) = Replay(tmp);
+            var (p2, f2) = ReplayWithIndex(tmp);
+            var (p3, f3) = ReplayWithStream(tmp);
 
             Assert.Equal(p1, p2);
             Assert.Equal(f1, f2);
+            Assert.Equal(p1, p3);
+            Assert.Equal(f1, f3);
         }
         finally
         {
@@ -44,7 +47,7 @@ public sealed class ReplayTests
         return (world.Population, world.Fires);
     }
 
-    private static (int pop, int fires) Replay(string path)
+    private static (int pop, int fires) ReplayWithIndex(string path)
     {
         var codec = new PopulationEventCodec();
         var entries = EventLogReader.ReadAll(path);
@@ -55,6 +58,20 @@ public sealed class ReplayTests
 
         var world = new WorldState();
         engine.ReplayFromLog(world, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(60), index: index, codec: codec);
+
+        return (world.Population, world.Fires);
+    }
+
+    private static (int pop, int fires) ReplayWithStream(string path)
+    {
+        var codec = new PopulationEventCodec();
+        var entries = EventLogReader.ReadStream(path);
+
+        var engine = new SimulationEngine<WorldState>();
+        engine.AddSystem(new PopulationSystem());
+
+        var world = new WorldState();
+        engine.ReplayFromLogStream(world, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(60), entries: entries, codec: codec);
 
         return (world.Population, world.Fires);
     }

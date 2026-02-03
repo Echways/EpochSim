@@ -10,50 +10,95 @@ public sealed class PopulationEventPayloadFormatter : IEventPayloadFormatter
         formatted = "";
 
         if (string.Equals(kind, "Fire", StringComparison.OrdinalIgnoreCase))
-        {
-            if (TryGetInt(payload, "Damage", out var dmg))
-            {
-                formatted = $"Damage={dmg}";
-                return true;
-            }
+            return TryFormatSingle(payload, "damage", "Damage", "Damage", out formatted);
 
-            formatted = payload ?? "";
-            return true;
-        }
+        if (string.Equals(kind, "PopulationDelta", StringComparison.OrdinalIgnoreCase))
+            return TryFormatSingle(payload, "delta", "Delta", "Delta", out formatted);
 
-        if (TryGetInt(payload, "Amount", out var amount))
-        {
-            formatted = $"Amount={amount}";
-            return true;
-        }
-
-        if (TryGetInt(payload, "Delta", out var delta))
-        {
-            formatted = $"Delta={delta}";
-            return true;
-        }
+        if (string.Equals(kind, "FireScheduled", StringComparison.OrdinalIgnoreCase))
+            return TryFormatScheduled(payload, out formatted);
 
         return false;
     }
 
-    private static bool TryGetInt(string payload, string name, out int value)
+    private static bool TryFormatSingle(string payload, string jsonName, string legacyName, string label, out string formatted)
     {
-        value = 0;
+        formatted = "";
         if (string.IsNullOrWhiteSpace(payload)) return false;
 
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            var root = doc.RootElement;
 
-            if (!doc.RootElement.TryGetProperty(name, out var p)) return false;
-
-            if (p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out value))
+            if (root.ValueKind == JsonValueKind.Number && root.TryGetInt32(out var n))
+            {
+                formatted = $"{label}={n}";
                 return true;
+            }
+
+            if (root.ValueKind == JsonValueKind.String && int.TryParse(root.GetString(), out var legacyValue))
+            {
+                formatted = $"{label}={legacyValue}";
+                return true;
+            }
+
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                if (root.TryGetProperty(jsonName, out var prop) || root.TryGetProperty(legacyName, out prop))
+                {
+                    if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var value))
+                    {
+                        formatted = $"{label}={value}";
+                        return true;
+                    }
+                }
+            }
 
             return false;
         }
-        catch
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryFormatScheduled(string payload, out string formatted)
+    {
+        formatted = "";
+        if (string.IsNullOrWhiteSpace(payload)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                var hasAt = root.TryGetProperty("at", out var atEl) || root.TryGetProperty("At", out atEl);
+                var hasDamage = root.TryGetProperty("damage", out var dmgEl) || root.TryGetProperty("Damage", out dmgEl);
+
+                if (hasAt && hasDamage && atEl.TryGetInt64(out var at) && dmgEl.TryGetInt32(out var damage))
+                {
+                    formatted = $"At={at} Damage={damage}";
+                    return true;
+                }
+            }
+
+            if (root.ValueKind == JsonValueKind.String)
+            {
+                var legacy = root.GetString() ?? "";
+                var parts = legacy.Split('|');
+                if (parts.Length == 2 && long.TryParse(parts[0], out var at) && int.TryParse(parts[1], out var damage))
+                {
+                    formatted = $"At={at} Damage={damage}";
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (JsonException)
         {
             return false;
         }

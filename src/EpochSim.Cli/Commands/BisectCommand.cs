@@ -29,15 +29,17 @@ public sealed class BisectCommand : ICliCommand
             throw new DirectoryNotFoundException($"RunDir not found: {paths.RunDir}");
 
         var meta = RunMetaReader.Read(paths.MetaPath);
+        var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
-        var endTick = endTickArg is not null && CliParsing.TryParseLong(endTickArg, out var et) ? et
-            : (RunMetaReader.TryGetLong(meta, "endTick", out var em) ? em : 500);
+        var endTick = endTickArg is not null && CliParsing.TryParseLong(endTickArg, out var endTickParsed) ? endTickParsed
+            : (manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500));
 
-        var seed = seedArg is not null && CliParsing.TryParseUlong(seedArg, out var sd) ? sd
-            : (RunMetaReader.TryGetUlong(meta, "seed", out var sm) ? sm : 12345UL);
+        var seed = seedArg is not null && CliParsing.TryParseUlong(seedArg, out var seedParsed) ? seedParsed
+            : (manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL));
 
-        if (!File.Exists(paths.EventsPath))
-            throw new FileNotFoundException($"events.jsonl not found: {paths.EventsPath}");
+        var eventsPath = paths.ResolveEventsPath();
+        if (!File.Exists(eventsPath))
+            throw new FileNotFoundException($"events log not found: {eventsPath}");
 
         if (!Directory.Exists(paths.SnapshotsDir))
             Directory.CreateDirectory(paths.SnapshotsDir);
@@ -64,7 +66,7 @@ public sealed class BisectCommand : ICliCommand
                 SnapshotRunner.LoadBestAndReplayTo(
                     engine: engine,
                     snapshotsDir: paths.SnapshotsDir,
-                    eventsPath: paths.EventsPath,
+                    eventsPath: eventsPath,
                     serializer: stateSerializer,
                     codec: codec,
                     seed: seed,

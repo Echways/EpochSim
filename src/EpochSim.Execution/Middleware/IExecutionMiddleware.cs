@@ -10,6 +10,9 @@ public interface IExecutionMiddleware
 
     void OnEventDispatched(SimTime time, IEvent ev) { }
 
+    void OnCommandHandlerStart(SimTime time, string handlerName, ICommand command) { }
+    void OnCommandHandlerEnd(SimTime time, string handlerName, ICommand command) { }
+
     void OnSystemTickStart(SimTime time, string systemName) { }
     void OnSystemTickEnd(SimTime time, string systemName) { }
 }

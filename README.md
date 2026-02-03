@@ -28,6 +28,12 @@ Run tests:
 dotnet test tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj
 ```
 
+Run benchmarks (throughput + allocations):
+
+```bash
+dotnet run -c Release --project benchmarks/EpochSim.Benchmarks
+```
+
 ## CLI commands
 - `run`
 - `validate-run`
@@ -49,3 +55,4 @@ dotnet test tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj
 - `src/EpochSim.Samples` - sample domain model (Population)
 - `src/EpochSim.Cli` - CLI runner and tools
 - `tests/EpochSim.Determinism.Tests` - determinism and replay tests
+- `benchmarks/EpochSim.Benchmarks` - performance benchmarks (BenchmarkDotNet)
