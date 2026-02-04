@@ -163,7 +163,7 @@ CLI не зависит от конкретного домена — он раб
 - `Codec`, `Serializer`
 - `CreateInvariants()` (если нужны)
 
-См. пример: `src/EpochSim.Cli/Domain/PopulationDomainAdapter.cs`.
+См. пример: [PopulationDomainAdapter.cs](src/EpochSim.Cli/Domain/PopulationDomainAdapter.cs).
 
 ## Тесты и бенчмарки
 Тесты:
