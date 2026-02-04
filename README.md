@@ -76,7 +76,7 @@ dotnet run --project src/EpochSim.Cli bisect artifacts <runId>
 
 Подробно: [DeterminismContract](DeterminismContract.md).
 
-## Пример API (минимальный домен)
+## Пример API
 ```csharp
 public sealed class WorldState
 {
@@ -124,7 +124,7 @@ var state = new WorldState();
 engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(100));
 ```
 
-## Воспроизведение (replay)
+## Воспроизведение
 ```csharp
 var codec = /* IEventCodecV2 */;
 var entries = EventLogReader.ReadStream("events.jsonl");
