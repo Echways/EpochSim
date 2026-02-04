@@ -47,11 +47,11 @@ public static class EventLogStatsComputer
             if (tick < minTick) minTick = tick;
             if (tick > maxTick) maxTick = tick;
 
-            byKind.TryGetValue(kind, out var kc);
-            byKind[kind] = kc + 1;
+            byKind.TryGetValue(kind, out var kindCount);
+            byKind[kind] = kindCount + 1;
 
-            byTick.TryGetValue(tick, out var tc);
-            byTick[tick] = tc + 1;
+            byTick.TryGetValue(tick, out var tickCount);
+            byTick[tick] = tickCount + 1;
 
             if (!string.IsNullOrWhiteSpace(payload))
                 TryAccumulateIntFields(dist, kind, payload);
@@ -107,10 +107,10 @@ public static class EventLogStatsComputer
             using var doc = JsonDocument.Parse(payload);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
 
-            foreach (var p in doc.RootElement.EnumerateObject())
+            foreach (var property in doc.RootElement.EnumerateObject())
             {
-                if (p.Value.ValueKind != JsonValueKind.Number) continue;
-                if (!p.Value.TryGetInt32(out var iv)) continue;
+                if (property.Value.ValueKind != JsonValueKind.Number) continue;
+                if (!property.Value.TryGetInt32(out var intValue)) continue;
 
                 if (!dist.TryGetValue(kind, out var fields))
                 {
@@ -118,14 +118,14 @@ public static class EventLogStatsComputer
                     dist[kind] = fields;
                 }
 
-                if (!fields.TryGetValue(p.Name, out var map))
+                if (!fields.TryGetValue(property.Name, out var map))
                 {
                     map = new Dictionary<int, long>();
-                    fields[p.Name] = map;
+                    fields[property.Name] = map;
                 }
 
-                map.TryGetValue(iv, out var c);
-                map[iv] = c + 1;
+                map.TryGetValue(intValue, out var count);
+                map[intValue] = count + 1;
             }
         }
         catch (JsonException)

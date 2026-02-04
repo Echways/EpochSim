@@ -8,8 +8,8 @@ public sealed class JsonlProfileWriter : IDisposable
 
     public JsonlProfileWriter(string path, bool append = false)
     {
-        var fs = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
-        _writer = new StreamWriter(fs, new UTF8Encoding(false));
+        var fileStream = new FileStream(path, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read);
+        _writer = new StreamWriter(fileStream, new UTF8Encoding(false));
     }
 
     public void Write(in ProfileRecord r)
@@ -33,11 +33,11 @@ public sealed class JsonlProfileWriter : IDisposable
 
     private static string JsonEscape(string s)
     {
-        var sb = new StringBuilder(s.Length + 8);
-        sb.Append('"');
+        var builder = new StringBuilder(s.Length + 8);
+        builder.Append('"');
         foreach (var ch in s)
         {
-            sb.Append(ch switch
+            builder.Append(ch switch
             {
                 '"' => "\\\"",
                 '\\' => "\\\\",
@@ -47,7 +47,7 @@ public sealed class JsonlProfileWriter : IDisposable
                 _ => ch
             });
         }
-        sb.Append('"');
-        return sb.ToString();
+        builder.Append('"');
+        return builder.ToString();
     }
 }

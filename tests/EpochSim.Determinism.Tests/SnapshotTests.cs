@@ -12,19 +12,19 @@ public sealed class SnapshotTests
     [Fact]
     public void SaveThenLoad_ProducesSameState()
     {
-        var tmp = Path.Combine(Path.GetTempPath(), $"epochsim-snap-{Guid.NewGuid():N}.json");
+        var snapshotPath = Path.Combine(Path.GetTempPath(), $"epochsim-snap-{Guid.NewGuid():N}.json");
 
         try
         {
-            var (p1, f1) = RunAndSave(tmp);
-            var (p2, f2) = Load(tmp);
+            var (savedPopulation, savedFires) = RunAndSave(snapshotPath);
+            var (loadedPopulation, loadedFires) = Load(snapshotPath);
 
-            Assert.Equal(p1, p2);
-            Assert.Equal(f1, f2);
+            Assert.Equal(savedPopulation, loadedPopulation);
+            Assert.Equal(savedFires, loadedFires);
         }
         finally
         {
-            if (File.Exists(tmp)) File.Delete(tmp);
+            if (File.Exists(snapshotPath)) File.Delete(snapshotPath);
         }
     }
 

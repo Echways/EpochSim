@@ -30,12 +30,12 @@ public static class TimelineDumper
             Console.WriteLine($"Tick {currentTick.Value} (events={totalForTick})");
 
             var shown = 0;
-            foreach (var (k, p) in buffer)
+            foreach (var (kind, rawPayload) in buffer)
             {
                 if (shown >= maxEventsPerTick) break;
 
-                var payload = p ?? "";
-                if (formatter.TryFormat(k, payload, out var pretty))
+                var payload = rawPayload ?? "";
+                if (formatter.TryFormat(kind, payload, out var pretty))
                     payload = pretty;
 
                 payload = NormalizePayload(payload);
@@ -43,9 +43,9 @@ public static class TimelineDumper
                     payload = payload.Substring(0, maxPayloadChars) + "...";
 
                 if (payload.Length == 0)
-                    Console.WriteLine($"  - {k}");
+                    Console.WriteLine($"  - {kind}");
                 else
-                    Console.WriteLine($"  - {k} {payload}");
+                    Console.WriteLine($"  - {kind} {payload}");
 
                 shown++;
             }

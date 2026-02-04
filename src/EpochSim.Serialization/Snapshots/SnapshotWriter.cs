@@ -6,13 +6,13 @@ public static class SnapshotWriter
 {
     public static void Write(string path, long tick, string stateJson)
     {
-        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
-        using var w = new StreamWriter(fs, new UTF8Encoding(false));
+        using var fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+        using var writer = new StreamWriter(fileStream, new UTF8Encoding(false));
 
-        w.Write("{\"t\":");
-        w.Write(tick);
-        w.Write(",\"state\":");
-        w.Write(stateJson);
-        w.WriteLine("}");
+        writer.Write("{\"t\":");
+        writer.Write(tick);
+        writer.Write(",\"state\":");
+        writer.Write(stateJson);
+        writer.WriteLine("}");
     }
 }

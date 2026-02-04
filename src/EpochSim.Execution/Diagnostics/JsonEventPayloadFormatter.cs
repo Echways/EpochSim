@@ -21,51 +21,51 @@ public sealed class JsonEventPayloadFormatter(int maxPairs = 16) : IEventPayload
             formatted = Format(doc.RootElement);
             return true;
         }
-        catch
+        catch (JsonException)
         {
             formatted = payload;
             return true;
         }
     }
 
-    private string Format(JsonElement e)
+    private string Format(JsonElement element)
     {
-        return e.ValueKind switch
+        return element.ValueKind switch
         {
-            JsonValueKind.Object => FormatObject(e),
-            JsonValueKind.Array => $"[{e.GetArrayLength()}]",
-            JsonValueKind.String => Quote(e.GetString() ?? ""),
-            JsonValueKind.Number => e.GetRawText(),
+            JsonValueKind.Object => FormatObject(element),
+            JsonValueKind.Array => $"[{element.GetArrayLength()}]",
+            JsonValueKind.String => Quote(element.GetString() ?? ""),
+            JsonValueKind.Number => element.GetRawText(),
             JsonValueKind.True => "true",
             JsonValueKind.False => "false",
             JsonValueKind.Null => "null",
-            _ => e.GetRawText()
+            _ => element.GetRawText()
         };
     }
 
     private string FormatObject(JsonElement obj)
     {
-        var props = obj.EnumerateObject()
+        var properties = obj.EnumerateObject()
             .OrderBy(p => p.Name, StringComparer.Ordinal)
             .Take(Math.Max(1, maxPairs))
             .ToArray();
 
-        var sb = new StringBuilder();
-        sb.Append('{');
+        var builder = new StringBuilder();
+        builder.Append('{');
 
-        for (var i = 0; i < props.Length; i++)
+        for (var i = 0; i < properties.Length; i++)
         {
-            if (i > 0) sb.Append(", ");
-            sb.Append(props[i].Name);
-            sb.Append('=');
-            sb.Append(Format(props[i].Value));
+            if (i > 0) builder.Append(", ");
+            builder.Append(properties[i].Name);
+            builder.Append('=');
+            builder.Append(Format(properties[i].Value));
         }
 
-        if (obj.EnumerateObject().Skip(props.Length).Any())
-            sb.Append(", ...");
+        if (obj.EnumerateObject().Skip(properties.Length).Any())
+            builder.Append(", ...");
 
-        sb.Append('}');
-        return sb.ToString();
+        builder.Append('}');
+        return builder.ToString();
     }
 
     private static string Quote(string s)

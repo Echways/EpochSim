@@ -13,14 +13,14 @@ public sealed class AutoSnapshotReplayTests
     public void AutoSnapshots_EnableFastReplayToEnd()
     {
         var eventsPath = Path.Combine(Path.GetTempPath(), $"epochsim-events-{Guid.NewGuid():N}.jsonl");
-        var snapsDir = Path.Combine(Path.GetTempPath(), $"epochsim-snaps-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(snapsDir);
+        var snapshotsDir = Path.Combine(Path.GetTempPath(), $"epochsim-snaps-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(snapshotsDir);
 
         try
         {
             var endTick = 200L;
 
-            var (pFull, fFull) = RunWithAutoSnapshots(eventsPath, snapsDir, endTick, snapEvery: 25);
+            var (fullPopulation, fullFires) = RunWithAutoSnapshots(eventsPath, snapshotsDir, endTick, snapEvery: 25);
 
             var engine = new SimulationEngine<WorldState>();
             engine.AddSystem(new PopulationSystem());
@@ -30,7 +30,7 @@ public sealed class AutoSnapshotReplayTests
 
             var world = SnapshotRunner.LoadBestAndReplayTo(
                 engine: engine,
-                snapshotsDir: snapsDir,
+                snapshotsDir: snapshotsDir,
                 eventsPath: eventsPath,
                 serializer: serializer,
                 codec: codec,
@@ -38,17 +38,17 @@ public sealed class AutoSnapshotReplayTests
                 endTick: endTick,
                 newState: () => new WorldState());
 
-            Assert.Equal(pFull, world.Population);
-            Assert.Equal(fFull, world.Fires);
+            Assert.Equal(fullPopulation, world.Population);
+            Assert.Equal(fullFires, world.Fires);
         }
         finally
         {
             if (File.Exists(eventsPath)) File.Delete(eventsPath);
-            if (Directory.Exists(snapsDir)) Directory.Delete(snapsDir, recursive: true);
+            if (Directory.Exists(snapshotsDir)) Directory.Delete(snapshotsDir, recursive: true);
         }
     }
 
-    private static (int pop, int fires) RunWithAutoSnapshots(string eventsPath, string snapsDir, long endTick, long snapEvery)
+    private static (int pop, int fires) RunWithAutoSnapshots(string eventsPath, string snapshotsDir, long endTick, long snapEvery)
     {
         var codec = new PopulationEventCodec();
         var serializer = new JsonStateSerializer<WorldState>();
@@ -62,7 +62,7 @@ public sealed class AutoSnapshotReplayTests
         engine.AddMiddleware(new EventLogMiddleware(writer, codec));
 
         var world = new WorldState();
-        engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, snapsDir, serializer));
+        engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, snapshotsDir, serializer));
 
         engine.RunTicks(world, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(endTick));
 

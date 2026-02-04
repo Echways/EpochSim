@@ -44,19 +44,19 @@ public static class PrettyRunInspector
 
         if (Directory.Exists(paths.SnapshotsDir))
         {
-            var snaps = Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").ToArray();
-            Console.WriteLine($"Snapshots={snaps.Length}");
-            if (snaps.Length > 0)
+            var snapshots = Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").ToArray();
+            Console.WriteLine($"Snapshots={snapshots.Length}");
+            if (snapshots.Length > 0)
             {
-                var best = snaps.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
-                Console.WriteLine($"LastSnapshot={best.Name}");
+                var latestSnapshot = snapshots.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                Console.WriteLine($"LastSnapshot={latestSnapshot.Name}");
 
                 try
                 {
-                    var snap = SnapshotReader.Read(best.FullName);
+                    var snap = SnapshotReader.Read(latestSnapshot.FullName);
                     Console.WriteLine($"LastSnapshotTick={snap.Tick}");
                 }
-                catch
+                catch (Exception)
                 {
                     Console.WriteLine("LastSnapshotTick=<unreadable>");
                 }
@@ -69,12 +69,12 @@ public static class PrettyRunInspector
 
         if (Directory.Exists(paths.DumpsDir))
         {
-            var metas = Directory.EnumerateFiles(paths.DumpsDir, "violation-meta-*.txt").ToArray();
-            Console.WriteLine($"DumpMetas={metas.Length}");
-            if (metas.Length > 0)
+            var dumpMetas = Directory.EnumerateFiles(paths.DumpsDir, "violation-meta-*.txt").ToArray();
+            Console.WriteLine($"DumpMetas={dumpMetas.Length}");
+            if (dumpMetas.Length > 0)
             {
-                var last = metas.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
-                Console.WriteLine($"LastDumpMeta={last.Name}");
+                var latestDump = dumpMetas.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                Console.WriteLine($"LastDumpMeta={latestDump.Name}");
             }
         }
         else
@@ -85,10 +85,10 @@ public static class PrettyRunInspector
         var minDir = Path.Combine(paths.RunDir, "minrepro");
         if (Directory.Exists(minDir))
         {
-            var reps = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
-            Console.WriteLine($"MinRepros={reps.Length}");
-            if (reps.Length > 0)
-                Console.WriteLine($"LastMinRepro={reps[0]}");
+            var repros = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
+            Console.WriteLine($"MinRepros={repros.Length}");
+            if (repros.Length > 0)
+                Console.WriteLine($"LastMinRepro={repros[0]}");
         }
         else
         {

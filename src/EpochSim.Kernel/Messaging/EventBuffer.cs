@@ -2,7 +2,7 @@ namespace EpochSim.Kernel.Messaging;
 
 public sealed class EventBuffer : IEventBuffer
 {
-    private readonly List<IEvent> _items = [];
+    private readonly List<IEvent> _items = new();
 
     public void Emit(IEvent ev) => _items.Add(ev);
 

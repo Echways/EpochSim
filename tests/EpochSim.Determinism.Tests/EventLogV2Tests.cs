@@ -35,8 +35,8 @@ public sealed class EventLogV2Tests
         Assert.Equal(5, pd.Delta);
 
         Assert.True(codec.TryDecode("FireScheduled", "\"30|20\"", out var ev2));
-        var fs = Assert.IsType<FireScheduledEvent>(ev2);
-        Assert.Equal(30, fs.At.Tick);
-        Assert.Equal(20, fs.Damage);
+        var fireScheduled = Assert.IsType<FireScheduledEvent>(ev2);
+        Assert.Equal(30, fireScheduled.At.Tick);
+        Assert.Equal(20, fireScheduled.Damage);
     }
 }

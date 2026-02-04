@@ -150,7 +150,7 @@ public sealed class SimulationEngineSemanticsTests
 
     private sealed class OrderState
     {
-        public List<string> Log { get; } = [];
+        public List<string> Log { get; } = new();
     }
 
     private sealed class CountState
@@ -358,14 +358,18 @@ public sealed class SimulationEngineSemanticsTests
 
         public bool TryDecode(string kind, string payloadJson, out IEvent ev)
         {
-            ev = kind switch
+            switch (kind)
             {
-                "A" => new TestEventA(),
-                "B" => new TestEventB(),
-                _ => null!
-            };
-
-            return ev is not null;
+                case "A":
+                    ev = new TestEventA();
+                    return true;
+                case "B":
+                    ev = new TestEventB();
+                    return true;
+                default:
+                    ev = default!;
+                    return false;
+            }
         }
     }
 }

@@ -13,25 +13,25 @@ public sealed class SnapshotReplayTests
     public void SnapshotThenReplayRemaining_ProducesSameFinalState()
     {
         var eventsPath = Path.Combine(Path.GetTempPath(), $"epochsim-events-{Guid.NewGuid():N}.jsonl");
-        var snapPath = Path.Combine(Path.GetTempPath(), $"epochsim-snap-{Guid.NewGuid():N}.json");
+        var snapshotPath = Path.Combine(Path.GetTempPath(), $"epochsim-snap-{Guid.NewGuid():N}.json");
 
         try
         {
             var endTick = 60L;
             var snapTick = 40L;
 
-            var (pFull, fFull) = RunFull(eventsPath, endTick);
-            SaveSnapshotAt(snapPath, snapTick);
+            var (fullPopulation, fullFires) = RunFull(eventsPath, endTick);
+            SaveSnapshotAt(snapshotPath, snapTick);
 
-            var (pFromSnap, fFromSnap) = ReplayFromSnapshot(eventsPath, snapPath, endTick);
+            var (snapshotPopulation, snapshotFires) = ReplayFromSnapshot(eventsPath, snapshotPath, endTick);
 
-            Assert.Equal(pFull, pFromSnap);
-            Assert.Equal(fFull, fFromSnap);
+            Assert.Equal(fullPopulation, snapshotPopulation);
+            Assert.Equal(fullFires, snapshotFires);
         }
         finally
         {
             if (File.Exists(eventsPath)) File.Delete(eventsPath);
-            if (File.Exists(snapPath)) File.Delete(snapPath);
+            if (File.Exists(snapshotPath)) File.Delete(snapshotPath);
         }
     }
 

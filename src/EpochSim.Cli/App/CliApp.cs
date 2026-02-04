@@ -32,16 +32,16 @@ public sealed class CliApp
 
     public Task<int> RunAsync(string[] args)
     {
-        var cmd = args.Length > 0 ? args[0] : "run";
+        var commandName = args.Length > 0 ? args[0] : "run";
         var root = args.Length > 1 ? args[1] : "artifacts";
-        var rest = args.Length > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
+        var commandArgs = args.Length > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
 
         var ctx = new CommandContext(
             root,
             new PopulationEventCodec(),
             new JsonStateSerializer<WorldState>());
 
-        if (!_commands.TryGetValue(cmd, out var command) || command is null)
+        if (!_commands.TryGetValue(commandName, out var command))
         {
             PrintUsage();
             return Task.FromResult(2);
@@ -49,7 +49,7 @@ public sealed class CliApp
 
         try
         {
-            var rc = command.Execute(ctx, rest);
+            var rc = command.Execute(ctx, commandArgs);
             return Task.FromResult(rc);
         }
         catch (Exception ex)

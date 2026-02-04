@@ -10,8 +10,8 @@ namespace EpochSim.Execution;
 
 public sealed class SimulationEngine<TState>
 {
-    private readonly List<ISystem<TState>> _systems = [];
-    private readonly List<IExecutionMiddleware> _middleware = [];
+    private readonly List<ISystem<TState>> _systems = new();
+    private readonly List<IExecutionMiddleware> _middleware = new();
     private readonly CommandRouter<TState> _commandRouter = new();
 
     public void AddSystem(ISystem<TState> system) => _systems.Add(system);

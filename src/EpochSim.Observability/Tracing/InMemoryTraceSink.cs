@@ -2,7 +2,7 @@ namespace EpochSim.Observability.Tracing;
 
 public sealed class InMemoryTraceSink
 {
-    private readonly List<TraceRecord> _records = [];
+    private readonly List<TraceRecord> _records = new();
 
     public IReadOnlyList<TraceRecord> Records
     {
