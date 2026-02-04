@@ -21,27 +21,27 @@ public static class TraceFingerprint
         return Convert.ToHexString(sha.Hash!);
     }
 
-    private static void Update(HashAlgorithm sha, long v)
+    private static void Update(HashAlgorithm sha, long value)
     {
-        Span<byte> b = stackalloc byte[8];
-        BitConverter.TryWriteBytes(b, v);
-        sha.TransformBlock(b.ToArray(), 0, 8, null, 0);
+        Span<byte> buffer = stackalloc byte[8];
+        BitConverter.TryWriteBytes(buffer, value);
+        sha.TransformBlock(buffer.ToArray(), 0, 8, null, 0);
     }
 
-    private static void Update(HashAlgorithm sha, long? v)
+    private static void Update(HashAlgorithm sha, long? value)
     {
-        Update(sha, v.HasValue ? v.Value : long.MinValue);
+        Update(sha, value ?? long.MinValue);
     }
 
-    private static void Update(HashAlgorithm sha, string? s)
+    private static void Update(HashAlgorithm sha, string? value)
     {
-        if (s is null)
+        if (value is null)
         {
             Update(sha, -1L);
             return;
         }
 
-        var bytes = Encoding.UTF8.GetBytes(s);
+        var bytes = Encoding.UTF8.GetBytes(value);
         Update(sha, bytes.Length);
         sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
     }

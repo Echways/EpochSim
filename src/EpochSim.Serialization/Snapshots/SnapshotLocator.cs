@@ -14,12 +14,12 @@ public static class SnapshotLocator
             var name = Path.GetFileNameWithoutExtension(file);
             if (!name.StartsWith("snapshot-", StringComparison.Ordinal)) continue;
 
-            var s = name.Substring("snapshot-".Length);
-            if (!long.TryParse(s, out var t)) continue;
+            var tickText = name.Substring("snapshot-".Length);
+            if (!long.TryParse(tickText, out var tick)) continue;
 
-            if (t <= tickInclusive && t > bestTick)
+            if (tick <= tickInclusive && tick > bestTick)
             {
-                bestTick = t;
+                bestTick = tick;
                 bestPath = file;
             }
         }

@@ -5,7 +5,7 @@ namespace EpochSim.Execution.StateFingerprint;
 
 public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprintSink
 {
-    private readonly StreamWriter _w;
+    private readonly StreamWriter _writer;
 
     public JsonlStateFingerprintWriter(string path)
     {
@@ -13,23 +13,23 @@ public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprint
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
 
-        _w = new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read), new UTF8Encoding(false));
+        _writer = new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read), new UTF8Encoding(false));
     }
 
     public void OnRecord(long tick, string hash)
     {
-        _w.Write("{\"t\":");
-        _w.Write(tick);
-        _w.Write(",\"h\":\"");
-        _w.Write(hash);
-        _w.WriteLine("\"}");
+        _writer.Write("{\"t\":");
+        _writer.Write(tick);
+        _writer.Write(",\"h\":\"");
+        _writer.Write(hash);
+        _writer.WriteLine("\"}");
     }
 
-    public void Dispose() => _w.Dispose();
+    public void Dispose() => _writer.Dispose();
 
     public static Dictionary<long, string> ReadAll(string path)
     {
-        var dict = new Dictionary<long, string>();
+        var records = new Dictionary<long, string>();
         foreach (var line in File.ReadLines(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
@@ -38,10 +38,10 @@ public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprint
             if (!root.TryGetProperty("t", out var tProp) || !root.TryGetProperty("h", out var hProp))
                 continue;
 
-            var t = tProp.GetInt64();
-            var h = hProp.GetString() ?? "";
-            dict[t] = h;
+            var tick = tProp.GetInt64();
+            var hash = hProp.GetString() ?? "";
+            records[tick] = hash;
         }
-        return dict;
+        return records;
     }
 }

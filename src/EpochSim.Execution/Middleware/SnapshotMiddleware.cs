@@ -17,7 +17,7 @@ public sealed class SnapshotMiddleware<TState>(
         if (time.Tick % intervalTicks != 0) return;
 
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"snapshot-{time.Tick}.json");
-        SnapshotWriter.Write(path, tick: time.Tick, stateJson: serializer.Serialize(state));
+        var snapshotPath = Path.Combine(directory, $"snapshot-{time.Tick}.json");
+        SnapshotWriter.Write(snapshotPath, tick: time.Tick, stateJson: serializer.Serialize(state));
     }
 }

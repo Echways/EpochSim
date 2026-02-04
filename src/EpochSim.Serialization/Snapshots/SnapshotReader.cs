@@ -15,75 +15,75 @@ public static class SnapshotReader
 
     private static long ReadLongField(string text, string field)
     {
-        var i = text.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException($"Missing field {field}");
+        var index = text.IndexOf(field, StringComparison.Ordinal);
+        if (index < 0) throw new FormatException($"Missing field {field}");
 
-        i += field.Length;
-        while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+        index += field.Length;
+        while (index < text.Length && char.IsWhiteSpace(text[index])) index++;
 
-        var end = i;
-        while (end < text.Length && (char.IsDigit(text[end]) || text[end] == '-')) end++;
+        var endIndex = index;
+        while (endIndex < text.Length && (char.IsDigit(text[endIndex]) || text[endIndex] == '-')) endIndex++;
 
-        var span = text.AsSpan(i, end - i);
-        if (!long.TryParse(span, out var v)) throw new FormatException($"Invalid number for {field}");
+        var span = text.AsSpan(index, endIndex - index);
+        if (!long.TryParse(span, out var value)) throw new FormatException($"Invalid number for {field}");
 
-        return v;
+        return value;
     }
 
     private static string ReadJsonValue(string text, string field)
     {
-        var i = text.IndexOf(field, StringComparison.Ordinal);
-        if (i < 0) throw new FormatException($"Missing field {field}");
+        var index = text.IndexOf(field, StringComparison.Ordinal);
+        if (index < 0) throw new FormatException($"Missing field {field}");
 
-        i += field.Length;
-        while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+        index += field.Length;
+        while (index < text.Length && char.IsWhiteSpace(text[index])) index++;
 
-        if (i >= text.Length) throw new FormatException($"Invalid JSON for {field}");
+        if (index >= text.Length) throw new FormatException($"Invalid JSON for {field}");
 
-        var start = i;
+        var startIndex = index;
 
-        if (text[i] == '"')
+        if (text[index] == '"')
         {
-            i++;
-            while (i < text.Length)
+            index++;
+            while (index < text.Length)
             {
-                var ch = text[i++];
+                var ch = text[index++];
                 if (ch == '\\')
                 {
-                    if (i < text.Length) i++;
+                    if (index < text.Length) index++;
                     continue;
                 }
                 if (ch == '"') break;
             }
-            return text.Substring(start, i - start);
+            return text.Substring(startIndex, index - startIndex);
         }
 
-        if (text[i] == '{' || text[i] == '[')
+        if (text[index] == '{' || text[index] == '[')
         {
-            var open = text[i];
+            var open = text[index];
             var close = open == '{' ? '}' : ']';
 
             var depth = 0;
-            var inStr = false;
+            var inString = false;
 
-            while (i < text.Length)
+            while (index < text.Length)
             {
-                var ch = text[i++];
+                var ch = text[index++];
 
-                if (inStr)
+                if (inString)
                 {
                     if (ch == '\\')
                     {
-                        if (i < text.Length) i++;
+                        if (index < text.Length) index++;
                         continue;
                     }
-                    if (ch == '"') inStr = false;
+                    if (ch == '"') inString = false;
                     continue;
                 }
 
                 if (ch == '"')
                 {
-                    inStr = true;
+                    inString = true;
                     continue;
                 }
 
@@ -93,11 +93,11 @@ public static class SnapshotReader
                 if (depth == 0) break;
             }
 
-            return text.Substring(start, i - start);
+            return text.Substring(startIndex, index - startIndex);
         }
 
-        var end = i;
-        while (end < text.Length && text[end] != ',' && text[end] != '}' && !char.IsWhiteSpace(text[end])) end++;
-        return text.Substring(start, end - start);
+        var endIndex = index;
+        while (endIndex < text.Length && text[endIndex] != ',' && text[endIndex] != '}' && !char.IsWhiteSpace(text[endIndex])) endIndex++;
+        return text.Substring(startIndex, endIndex - startIndex);
     }
 }

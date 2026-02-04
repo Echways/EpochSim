@@ -6,7 +6,7 @@ namespace EpochSim.Execution.Middleware;
 
 public sealed class InMemoryEventLogMiddleware(IEventCodecV2 codec) : IExecutionMiddleware
 {
-    private readonly List<EventLogEntryV2> _entries = [];
+    private readonly List<EventLogEntryV2> _entries = new();
     public IReadOnlyList<EventLogEntryV2> Entries => _entries;
 
     public long CurrentTick { get; private set; }

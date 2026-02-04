@@ -5,14 +5,14 @@ namespace EpochSim.Execution.RunArtifacts;
 
 public static class RunManifestWriter
 {
-    private static readonly JsonSerializerOptions Options = new()
+    private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true
     };
 
     public static void Write(string path, RunManifest manifest)
     {
-        var json = JsonSerializer.Serialize(manifest, Options);
+        var json = JsonSerializer.Serialize(manifest, SerializerOptions);
         File.WriteAllText(path, json);
     }
 

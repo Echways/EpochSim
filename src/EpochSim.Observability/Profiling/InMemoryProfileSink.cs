@@ -2,7 +2,7 @@ namespace EpochSim.Observability.Profiling;
 
 public sealed class InMemoryProfileSink
 {
-    private readonly List<ProfileRecord> _records = [];
+    private readonly List<ProfileRecord> _records = new();
 
     public IReadOnlyList<ProfileRecord> Records
     {

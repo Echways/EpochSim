@@ -51,8 +51,8 @@ public sealed class Scheduler : IScheduler
     {
         public int Compare(ScheduledItem a, ScheduledItem b)
         {
-            var t = a.Time.Tick.CompareTo(b.Time.Tick);
-            if (t != 0) return t;
+            var timeComparison = a.Time.Tick.CompareTo(b.Time.Tick);
+            if (timeComparison != 0) return timeComparison;
             return a.Seq.CompareTo(b.Seq);
         }
     }

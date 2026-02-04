@@ -38,11 +38,11 @@ public sealed class EventLogWriter : IDisposable
 
     private static string JsonEscape(string s)
     {
-        var sb = new StringBuilder(s.Length + 8);
-        sb.Append('"');
+        var builder = new StringBuilder(s.Length + 8);
+        builder.Append('"');
         foreach (var ch in s)
         {
-            sb.Append(ch switch
+            builder.Append(ch switch
             {
                 '"' => "\\\"",
                 '\\' => "\\\\",
@@ -52,7 +52,7 @@ public sealed class EventLogWriter : IDisposable
                 _ => ch
             });
         }
-        sb.Append('"');
-        return sb.ToString();
+        builder.Append('"');
+        return builder.ToString();
     }
 }

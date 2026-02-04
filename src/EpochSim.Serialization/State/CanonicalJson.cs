@@ -9,56 +9,56 @@ public static class CanonicalJson
     {
         using var doc = JsonDocument.Parse(json);
         using var ms = new MemoryStream();
-        using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = false }))
+        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = false }))
         {
-            WriteCanonical(w, doc.RootElement);
+            WriteCanonical(writer, doc.RootElement);
         }
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
-    private static void WriteCanonical(Utf8JsonWriter w, JsonElement e)
+    private static void WriteCanonical(Utf8JsonWriter writer, JsonElement element)
     {
-        switch (e.ValueKind)
+        switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                w.WriteStartObject();
-                foreach (var p in e.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
+                writer.WriteStartObject();
+                foreach (var property in element.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal))
                 {
-                    w.WritePropertyName(p.Name);
-                    WriteCanonical(w, p.Value);
+                    writer.WritePropertyName(property.Name);
+                    WriteCanonical(writer, property.Value);
                 }
-                w.WriteEndObject();
+                writer.WriteEndObject();
                 break;
 
             case JsonValueKind.Array:
-                w.WriteStartArray();
-                foreach (var item in e.EnumerateArray())
-                    WriteCanonical(w, item);
-                w.WriteEndArray();
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                    WriteCanonical(writer, item);
+                writer.WriteEndArray();
                 break;
 
             case JsonValueKind.String:
-                w.WriteStringValue(e.GetString());
+                writer.WriteStringValue(element.GetString());
                 break;
 
             case JsonValueKind.Number:
-                w.WriteRawValue(e.GetRawText(), skipInputValidation: true);
+                writer.WriteRawValue(element.GetRawText(), skipInputValidation: true);
                 break;
 
             case JsonValueKind.True:
-                w.WriteBooleanValue(true);
+                writer.WriteBooleanValue(true);
                 break;
 
             case JsonValueKind.False:
-                w.WriteBooleanValue(false);
+                writer.WriteBooleanValue(false);
                 break;
 
             case JsonValueKind.Null:
-                w.WriteNullValue();
+                writer.WriteNullValue();
                 break;
 
             default:
-                w.WriteRawValue(e.GetRawText(), skipInputValidation: true);
+                writer.WriteRawValue(element.GetRawText(), skipInputValidation: true);
                 break;
         }
     }

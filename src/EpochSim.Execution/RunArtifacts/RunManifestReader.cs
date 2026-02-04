@@ -4,7 +4,7 @@ namespace EpochSim.Execution.RunArtifacts;
 
 public static class RunManifestReader
 {
-    private static readonly JsonSerializerOptions Options = new()
+    private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
@@ -17,9 +17,9 @@ public static class RunManifestReader
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<RunManifest>(json, Options);
+            return JsonSerializer.Deserialize<RunManifest>(json, SerializerOptions);
         }
-        catch
+        catch (Exception)
         {
             return null;
         }

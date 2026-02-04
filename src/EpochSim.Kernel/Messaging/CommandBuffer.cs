@@ -8,7 +8,7 @@ public interface ICommandBuffer
 
 public sealed class CommandBuffer : ICommandBuffer
 {
-    private readonly List<ICommand> _items = [];
+    private readonly List<ICommand> _items = new();
 
     public void Enqueue(ICommand command) => _items.Add(command);
 

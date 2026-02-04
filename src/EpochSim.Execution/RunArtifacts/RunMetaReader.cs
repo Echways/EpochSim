@@ -4,30 +4,30 @@ public static class RunMetaReader
 {
     public static Dictionary<string, string> Read(string metaPath)
     {
-        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (!File.Exists(metaPath))
-            return dict;
+            return values;
 
         foreach (var line in File.ReadLines(metaPath))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var idx = line.IndexOf('=', StringComparison.Ordinal);
-            if (idx <= 0) continue;
+            var separatorIndex = line.IndexOf('=', StringComparison.Ordinal);
+            if (separatorIndex <= 0) continue;
 
-            var key = line.Substring(0, idx).Trim();
-            var val = line.Substring(idx + 1).Trim();
+            var key = line.Substring(0, separatorIndex).Trim();
+            var valueText = line.Substring(separatorIndex + 1).Trim();
             if (key.Length == 0) continue;
 
-            dict[key] = val;
+            values[key] = valueText;
         }
 
-        return dict;
+        return values;
     }
 
     public static bool TryGetLong(Dictionary<string, string> meta, string key, out long value)
     {
-        if (meta.TryGetValue(key, out var s) && long.TryParse(s, out value))
+        if (meta.TryGetValue(key, out var raw) && long.TryParse(raw, out value))
             return true;
 
         value = 0;
@@ -36,7 +36,7 @@ public static class RunMetaReader
 
     public static bool TryGetUlong(Dictionary<string, string> meta, string key, out ulong value)
     {
-        if (meta.TryGetValue(key, out var s) && ulong.TryParse(s, out value))
+        if (meta.TryGetValue(key, out var raw) && ulong.TryParse(raw, out value))
             return true;
 
         value = 0;

@@ -13,10 +13,10 @@ public sealed class ProfilingMiddleware(InMemoryProfileSink sink) : IExecutionMi
 
     public void OnSystemTickEnd(SimTime time, string systemName)
     {
-        if (_systemStartTicks.TryGetValue(systemName, out var st))
+        if (_systemStartTicks.TryGetValue(systemName, out var startTick))
         {
             var end = Stopwatch.GetTimestamp();
-            sink.Emit(new ProfileRecord(time, systemName, end - st));
+            sink.Emit(new ProfileRecord(time, systemName, end - startTick));
         }
     }
 }

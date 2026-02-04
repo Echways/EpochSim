@@ -22,25 +22,25 @@ public static class MinReproWriter
         var bestSnapPath = SnapshotLocator.FindBestSnapshot(paths.SnapshotsDir, Math.Max(0, failureTick - 1));
         long snapTick;
 
-        var snapOut = Path.Combine(dir, "snapshot.json");
+        var snapshotOutPath = Path.Combine(dir, "snapshot.json");
         if (bestSnapPath is null)
         {
             var stateJson = serializer.Serialize(newState());
-            SnapshotWriter.Write(snapOut, 0, stateJson);
+            SnapshotWriter.Write(snapshotOutPath, 0, stateJson);
             snapTick = 0;
         }
         else
         {
-            File.Copy(bestSnapPath, snapOut, overwrite: true);
-            var snap = SnapshotReader.Read(snapOut);
+            File.Copy(bestSnapPath, snapshotOutPath, overwrite: true);
+            var snap = SnapshotReader.Read(snapshotOutPath);
             snapTick = snap.Tick;
         }
 
-        var eventsOut = Path.Combine(dir, "events.jsonl");
-        WriteEventsTail(paths.ResolveEventsPath(), eventsOut, snapTick, failureTick);
+        var eventsOutPath = Path.Combine(dir, "events.jsonl");
+        WriteEventsTail(paths.ResolveEventsPath(), eventsOutPath, snapTick, failureTick);
 
-        var metaOut = Path.Combine(dir, "meta.txt");
-        File.WriteAllText(metaOut,
+        var metaOutPath = Path.Combine(dir, "meta.txt");
+        File.WriteAllText(metaOutPath,
             $"runId={paths.RunId}\n" +
             $"failureTick={failureTick}\n" +
             $"snapshotTick={snapTick}\n" +

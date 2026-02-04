@@ -19,17 +19,17 @@ public sealed class FailFastDumpMiddleware<TState>(
         var tick = currentTickProvider();
         if (tick < 0) tick = ex.Time.Tick;
 
-        var snapPath = Path.Combine(dumpDirectory, $"violation-snapshot-{tick}.json");
-        SnapshotWriter.Write(snapPath, tick, serializer.Serialize(state));
+        var snapshotPath = Path.Combine(dumpDirectory, $"violation-snapshot-{tick}.json");
+        SnapshotWriter.Write(snapshotPath, tick, serializer.Serialize(state));
 
-        var eventsPath = Path.Combine(dumpDirectory, $"violation-events-{tick}.jsonl");
-        using (var writer = new EventLogWriter(eventsPath))
+        var eventsLogPath = Path.Combine(dumpDirectory, $"violation-events-{tick}.jsonl");
+        using (var writer = new EventLogWriter(eventsLogPath))
         {
             var entries = eventLogProvider();
             for (int i = 0; i < entries.Count; i++)
             {
-                var e = entries[i];
-                writer.Write(e.Tick, e.Kind, e.PayloadJson);
+                var entry = entries[i];
+                writer.Write(entry.Tick, entry.Kind, entry.PayloadJson);
             }
         }
 

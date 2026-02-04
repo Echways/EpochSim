@@ -10,7 +10,7 @@ public sealed class EventLogIndex
         {
             if (!_byTick.TryGetValue(e.Tick, out var list))
             {
-                list = [];
+                list = new List<EventLogEntryV2>();
                 _byTick[e.Tick] = list;
             }
 

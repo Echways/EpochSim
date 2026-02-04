@@ -31,7 +31,7 @@ public sealed class DeterminismTests
         var world = new WorldState();
         engine.RunTicks(world, seed, SimTime.Zero, new SimTime(60));
 
-        var fp = TraceFingerprint.Compute(sink.Records);
-        return (world.Population, world.Fires, fp);
+        var fingerprint = TraceFingerprint.Compute(sink.Records);
+        return (world.Population, world.Fires, fingerprint);
     }
 }

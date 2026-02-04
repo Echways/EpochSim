@@ -15,9 +15,9 @@ public sealed class InvariantMiddleware<TState>(
 
         for (int i = 0; i < invariants.Count; i++)
         {
-            var inv = invariants[i];
-            if (!inv.Check(time, state, out var msg))
-                throw new InvariantViolationException(inv.Name, time, msg);
+            var invariant = invariants[i];
+            if (!invariant.Check(time, state, out var message))
+                throw new InvariantViolationException(invariant.Name, time, message);
         }
     }
 }

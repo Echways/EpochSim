@@ -10,22 +10,22 @@ public sealed class ReplayTests
     [Fact]
     public void RunThenReplay_ProducesSameState()
     {
-        var tmp = Path.Combine(Path.GetTempPath(), $"epochsim-events-{Guid.NewGuid():N}.jsonl");
+        var path = Path.Combine(Path.GetTempPath(), $"epochsim-events-{Guid.NewGuid():N}.jsonl");
 
         try
         {
-            var (p1, f1) = RunAndWrite(tmp);
-            var (p2, f2) = ReplayWithIndex(tmp);
-            var (p3, f3) = ReplayWithStream(tmp);
+            var (runPopulation, runFires) = RunAndWrite(path);
+            var (indexPopulation, indexFires) = ReplayWithIndex(path);
+            var (streamPopulation, streamFires) = ReplayWithStream(path);
 
-            Assert.Equal(p1, p2);
-            Assert.Equal(f1, f2);
-            Assert.Equal(p1, p3);
-            Assert.Equal(f1, f3);
+            Assert.Equal(runPopulation, indexPopulation);
+            Assert.Equal(runFires, indexFires);
+            Assert.Equal(runPopulation, streamPopulation);
+            Assert.Equal(runFires, streamFires);
         }
         finally
         {
-            if (File.Exists(tmp)) File.Delete(tmp);
+            if (File.Exists(path)) File.Delete(path);
         }
     }
 

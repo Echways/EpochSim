@@ -37,8 +37,12 @@ public static class EventLogReader
         if (File.Exists(path))
             return path;
 
-        if (!path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) && File.Exists(path + ".gz"))
-            return path + ".gz";
+        if (!path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+        {
+            var gzPath = path + ".gz";
+            if (File.Exists(gzPath))
+                return gzPath;
+        }
 
         return path;
     }

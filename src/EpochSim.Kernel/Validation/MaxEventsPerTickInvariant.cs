@@ -10,14 +10,14 @@ public sealed class MaxEventsPerTickInvariant<TState>(
 
     public bool Check(SimTime time, TState state, out string message)
     {
-        var n = eventsThisTickProvider();
-        if (n <= maxEvents)
+        var eventsThisTick = eventsThisTickProvider();
+        if (eventsThisTick <= maxEvents)
         {
             message = "";
             return true;
         }
 
-        message = $"EventsThisTick={n}, Max={maxEvents}";
+        message = $"EventsThisTick={eventsThisTick}, Max={maxEvents}";
         return false;
     }
 }

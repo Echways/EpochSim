@@ -6,9 +6,9 @@ public sealed class CompositeEventPayloadFormatter(params IEventPayloadFormatter
 
     public bool TryFormat(string kind, string payload, out string formatted)
     {
-        foreach (var f in _formatters)
+        foreach (var formatter in _formatters)
         {
-            if (f.TryFormat(kind, payload, out formatted))
+            if (formatter.TryFormat(kind, payload, out formatted))
                 return true;
         }
 
