@@ -1,32 +1,37 @@
-Determinism Contract
+# Контракт детерминизма
 
-EpochSim guarantees deterministic execution for a given set of inputs (initial state, seed, systems, commands/events, options). The following ordering and lifecycle rules are enforced:
+EpochSim гарантирует детерминированное выполнение при одинаковых входных данных (начальное состояние, seed, системы, команды/события, опции). Ниже — фиксированный порядок вызовов и правила обработки.
 
-1) Tick lifecycle
-- OnRunStart is called exactly once before any ticks are processed.
-- For each tick T, OnTickStart(T) is called before any event dispatch at tick T.
-- OnTickEnd(T) is called after all command/event processing for tick T completes.
-- OnRunEnd is always called once, even if the run fails.
+## 1) Жизненный цикл запуска
+- `OnRunStart` вызывается ровно один раз до начала обработки тиков.
+- `OnRunEnd` вызывается всегда и ровно один раз, даже при ошибке.
+- Если происходит исключение, `OnRunFailed` вызывается один раз перед повторным выбросом.
 
-2) System ordering
-- Systems are ticked in the order they were registered.
-- For each system, OnSystemTickStart(T, system) and OnSystemTickEnd(T, system) wrap the system’s Tick call for that tick.
-- Event handling dispatches to systems in the same stable registration order.
+## 2) Порядок тиков
+- Для каждого тика `T` сначала вызывается `OnTickStart(T)`.
+- Никакие события тика `T` не диспетчатся до `OnTickStart(T)`.
+- После завершения обработки команд/событий вызывается `OnTickEnd(T)`.
 
-3) Scheduler ordering
-- Scheduled events are drained for the current tick only.
-- For events scheduled to the same tick, dispatch order preserves insertion order (stable tie‑break by sequence).
-- No scheduled events beyond endTickInclusive are dispatched.
+## 3) Порядок систем
+- Системы тикаются в порядке регистрации.
+- Для каждой системы `OnSystemTickStart(T, system)`/`OnSystemTickEnd(T, system)` обрамляют вызов `Tick`.
+- Обработка событий (`Handle`) тоже идёт в порядке регистрации систем.
 
-4) Command/event pump
-- Commands and events are processed FIFO.
-- Within a tick, the engine repeats:
-  a) Drain and dispatch all commands (FIFO), enqueueing emitted events.
-  b) Drain and dispatch all events (FIFO) to all systems in stable order.
-- The pump repeats until both queues are empty.
+## 4) Планировщик (scheduler)
+- За тик `T` обрабатываются только события, запланированные на `T`.
+- События, запланированные на один и тот же тик, обрабатываются в порядке добавления (стабильная очередь).
+- События за пределами `endTickInclusive` не диспетчатся.
 
-5) Middleware ordering
-- Middleware callbacks are invoked in registration order for each hook.
-- OnRunFailed is invoked exactly once when an exception occurs (before rethrow).
+## 5) Команды и события (pump‑цикл)
+Внутри каждого тика движок повторяет до стабилизации:
+1) Слить и обработать все команды (FIFO), добавляя события в очередь.
+2) Слить и обработать все события (FIFO) для всех систем в порядке регистрации.
 
-Any deviation from these rules is considered a correctness regression.
+Цикл продолжается, пока обе очереди не пусты.
+
+## 6) Порядок middleware
+- Все callbacks middleware вызываются в порядке регистрации для каждого hook.
+- Порядок `OnRunStart` → тики → `OnRunEnd` стабилен.
+- `OnRunFailed` вызывается ровно один раз.
+
+Любое отклонение от этих правил считается регрессией корректности.
