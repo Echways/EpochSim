@@ -9,6 +9,20 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+
+    <PackageDescription>Sample Population domain for EpochSim demonstrating systems, commands, events, and adapters.</PackageDescription>
+    <PackageTags>epochsim;samples;demo;examples;simulation;deterministic</PackageTags>
+    <Authors>Echways</Authors>
+    <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 
 </Project>

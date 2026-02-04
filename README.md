@@ -9,6 +9,27 @@ EpochSim полезен, когда нужно:
 - быстро перематывать состояние с помощью снапшотов;
 - иметь воспроизводимые тесты и удобные CLI‑инструменты.
 
+## Установка (NuGet)
+Основные пакеты:
+- `EpochSim.Kernel`
+- `EpochSim.Execution`
+- `EpochSim.Serialization`
+- `EpochSim.Observability`
+
+Метапакет:
+- `EpochSim.All` — подтягивает основные пакеты одним зависимым.
+```bash
+dotnet add package EmberTrace.All
+```
+
+CLI как .NET tool:
+```bash
+dotnet tool install -g EpochSim.Cli
+epochsim --help
+```
+
+`EpochSim.Samples` — демо‑домен, на NuGet не публикуется.
+
 ## Быстрый старт
 Примеры ниже используют демо‑домен Population.
 
@@ -177,11 +198,12 @@ dotnet run -c Release --project benchmarks/EpochSim.Benchmarks
 ```
 
 ## Структура репозитория
+- `src/EpochSim.All` — метапакет (NuGet)
 - `src/EpochSim.Kernel` — ядро: время, события, планировщик, RNG
 - `src/EpochSim.Execution` — движок и middleware
 - `src/EpochSim.Serialization` — event log, снапшоты, сериализация
 - `src/EpochSim.Observability` — трассировка
-- `src/EpochSim.Samples` — демо‑домен Population
+- `src/EpochSim.Samples` — демо‑домен Population (не публикуется)
 - `src/EpochSim.Cli` — CLI‑инструменты
 - `tests/` — детерминизм и семантика
 - `benchmarks/` — BenchmarkDotNet
