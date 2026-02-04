@@ -1,9 +1,12 @@
+using EpochSim.Kernel.Determinism;
+
 namespace EpochSim.Execution;
 
 public sealed class RunOptions
 {
     public int MaxPumpStepsPerTick { get; init; } = 1024;
     public int MaxEventsPerTick { get; init; } = 100_000;
+    public RngVersion RngVersion { get; init; } = RngVersion.V2;
 
     public void Validate()
     {

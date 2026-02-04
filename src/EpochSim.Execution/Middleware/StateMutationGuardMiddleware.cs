@@ -50,7 +50,7 @@ public sealed class StateMutationGuardMiddleware<TState>(
     private string Fingerprint()
     {
         var json = serializer.Serialize(state);
-        return Serialization.State.StateFingerprint.ComputeFromJson(json);
+        return EpochSim.Serialization.State.StateFingerprint.ComputeFromJson(json);
     }
 
     private static string HandlerKey(string handlerName, ICommand command)

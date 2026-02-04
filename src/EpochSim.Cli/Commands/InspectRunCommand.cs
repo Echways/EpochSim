@@ -33,6 +33,16 @@ public sealed class InspectRunCommand : ICliCommand
             Console.WriteLine("Meta: missing");
         }
 
+        if (File.Exists(paths.ManifestPath))
+        {
+            Console.WriteLine("Manifest:");
+            Console.WriteLine(File.ReadAllText(paths.ManifestPath));
+        }
+        else
+        {
+            Console.WriteLine("Manifest: missing");
+        }
+
         var eventsPath = paths.ResolveEventsPath();
         if (File.Exists(eventsPath))
             Console.WriteLine($"EventsLines={CountLines(eventsPath)}");

@@ -8,15 +8,19 @@ public interface ICommandBuffer
 
 public sealed class CommandBuffer : ICommandBuffer
 {
-    private readonly List<ICommand> _items = new();
+    private List<ICommand> _items = new();
+    private List<ICommand> _drainBuffer = new();
 
     public void Enqueue(ICommand command) => _items.Add(command);
 
     public IReadOnlyList<ICommand> Drain()
     {
         if (_items.Count == 0) return Array.Empty<ICommand>();
-        var copy = _items.ToArray();
+
+        var drained = _items;
+        _items = _drainBuffer;
+        _drainBuffer = drained;
         _items.Clear();
-        return copy;
+        return drained;
     }
 }

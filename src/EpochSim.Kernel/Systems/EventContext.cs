@@ -1,7 +1,8 @@
-using EpochSim.Kernel.Time;
+using System.Threading;
 using EpochSim.Kernel.Determinism;
-using EpochSim.Kernel.Scheduling;
 using EpochSim.Kernel.Messaging;
+using EpochSim.Kernel.Scheduling;
+using EpochSim.Kernel.Time;
 
 namespace EpochSim.Kernel.Systems;
 
@@ -11,7 +12,8 @@ public sealed class EventContext<TState>(
     IScheduler scheduler,
     ICommandBuffer commands,
     IEventEmitter events,
-    IRng rng)
+    IRng rng,
+    CancellationToken cancellation)
 {
     public SimTime Time { get; } = time;
     public TState State { get; } = state;
@@ -19,4 +21,5 @@ public sealed class EventContext<TState>(
     public ICommandBuffer Commands { get; } = commands;
     public IEventEmitter Events { get; } = events;
     public IRng Rng { get; } = rng;
+    public CancellationToken Cancellation { get; } = cancellation;
 }

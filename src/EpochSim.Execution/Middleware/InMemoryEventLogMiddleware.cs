@@ -23,6 +23,9 @@ public sealed class InMemoryEventLogMiddleware(IEventCodecV2 codec) : IExecution
         if (!codec.TryEncode(ev, out var kind, out var payloadJson))
             throw new InvalidOperationException($"No codec for event {ev.GetType().Name}");
 
+        if (!string.Equals(ev.Kind, kind, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Event kind mismatch: ev.Kind={ev.Kind}, codec={kind}.");
+
         _entries.Add(new EventLogEntryV2(time.Tick, kind, payloadJson));
         EventsThisTick++;
     }

@@ -1,21 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using EpochSim.Cli.App;
+using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.StateFingerprint;
+using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
-using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Cli.Commands;
 
-public sealed class ValidateRunCommand : ICliCommand
+public sealed class ValidateRunCommand : DomainCommandBase
 {
-    public int Execute(CommandContext ctx, string[] args)
+    protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
         var positional = new List<string>();
         var guardState = false;
@@ -24,6 +26,8 @@ public sealed class ValidateRunCommand : ICliCommand
         long? fingerprintEveryOpt = null;
         int? maxPumpStepsOpt = null;
         int? maxEventsOpt = null;
+        int? cancelAfterMsOpt = null;
+        RngVersion? rngVersionOpt = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -54,6 +58,12 @@ public sealed class ValidateRunCommand : ICliCommand
                 case "--max-events-per-tick":
                     if (TryReadInt(args, ref i, out var maxEvents)) maxEventsOpt = maxEvents;
                     break;
+                case "--cancel-after-ms":
+                    if (TryReadInt(args, ref i, out var cancelAfterMs)) cancelAfterMsOpt = cancelAfterMs;
+                    break;
+                case "--rng-version":
+                    if (TryReadRngVersion(args, ref i, out var rngVersion)) rngVersionOpt = rngVersion;
+                    break;
             }
         }
 
@@ -64,20 +74,18 @@ public sealed class ValidateRunCommand : ICliCommand
         var fingerprintEvery = fingerprintEveryOpt ?? 1;
         if (fingerprintEvery <= 0) fingerprintEvery = 1;
 
-        var codec = ctx.Codec;
-        var stateSerializer = ctx.StateSerializer;
+        var codec = adapter.Codec;
+        var stateSerializer = adapter.Serializer;
 
         var runId = string.IsNullOrWhiteSpace(runArg) ? RunId.New() : CliParsing.NormalizeRunId(runArg);
         var paths = new RunPaths(ctx.Root, runId);
         paths.Ensure();
         RunMetaWriter.Write(paths, mode: "validate-run", seed: seed, endTick: endTick, snapEvery: snapEvery, fingerprintEvery: fingerprintEvery);
 
-        var engine = new SimulationEngine<WorldState>();
-        engine.AddSystem(new PopulationSystem());
-        engine.RegisterCommandHandler(new GrowPopulationHandler());
-        engine.RegisterCommandHandler(new ScheduleFireHandler());
+        var engine = new SimulationEngine<TState>();
+        adapter.ConfigureEngine(engine);
 
-        var world = new WorldState();
+        var world = adapter.CreateInitialState();
 
         var memLog = new InMemoryEventLogMiddleware(codec);
         engine.AddMiddleware(memLog);
@@ -87,22 +95,26 @@ public sealed class ValidateRunCommand : ICliCommand
         engine.AddMiddleware(new EventLogMiddleware(eventWriter, codec));
 
         using var fpWriter = new JsonlStateFingerprintWriter(paths.StateFpPath);
-        engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(world, stateSerializer, fpWriter, fingerprintEvery));
+        engine.AddMiddleware(new StateFingerprintMiddleware<TState>(world, stateSerializer, fpWriter, fingerprintEvery));
 
         if (guardState)
-            engine.AddMiddleware(new StateMutationGuardMiddleware<WorldState>(world, stateSerializer));
+            engine.AddMiddleware(new StateMutationGuardMiddleware<TState>(world, stateSerializer));
 
-        engine.AddMiddleware(new SnapshotMiddleware<WorldState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
+        engine.AddMiddleware(new FailureArtifactsMiddleware<TState>(
+            world,
+            stateSerializer,
+            codec,
+            snapshotEnabled: snapEvery > 0));
 
-        var invariants = new List<IInvariant<WorldState>>
-        {
-            new PopulationNonNegativeInvariant(),
-            new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
-        };
+        engine.AddMiddleware(new SnapshotMiddleware<TState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
 
-        engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
+        var invariants = new List<IInvariant<TState>>();
+        invariants.AddRange(adapter.CreateInvariants());
+        invariants.Add(new MaxEventsPerTickInvariant<TState>(() => memLog.EventsThisTick, maxEvents: 1000));
 
-        var dumper = new FailFastDumpMiddleware<WorldState>(
+        engine.AddMiddleware(new InvariantMiddleware<TState>(world, invariants, checkEveryTicks: 1));
+
+        var dumper = new FailFastDumpMiddleware<TState>(
             state: world,
             currentTickProvider: () => memLog.CurrentTick,
             eventLogProvider: () => memLog.Entries,
@@ -113,30 +125,47 @@ public sealed class ValidateRunCommand : ICliCommand
         var options = new RunOptions
         {
             MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaults.MaxPumpStepsPerTick,
-            MaxEventsPerTick = maxEventsOpt ?? defaults.MaxEventsPerTick
+            MaxEventsPerTick = maxEventsOpt ?? defaults.MaxEventsPerTick,
+            RngVersion = rngVersionOpt ?? defaults.RngVersion
         };
 
         var manifest = new RunManifest(
             EngineVersion: RunManifestWriter.GetEngineVersion(),
+            RunMode: RunMode.Run.ToString(),
             Seed: seed,
             StartTick: 0,
             EndTick: endTick,
             EventLogVersion: 2,
+            RngVersion: options.RngVersion.ToString(),
             SnapshotEvery: snapEvery,
             FingerprintEvery: fingerprintEvery,
             MaxPumpStepsPerTick: options.MaxPumpStepsPerTick,
             MaxEventsPerTick: options.MaxEventsPerTick,
-            StrictReplay: false);
+            StrictReplay: false,
+            BuildTimestampUtc: DateTime.UtcNow);
 
         RunManifestWriter.Write(paths.ManifestPath, manifest);
 
         try
         {
-            engine.RunTicks(world, seed: seed, start: SimTime.Zero, endInclusive: new SimTime(endTick), options: options);
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ctx.Cancellation);
+            if (cancelAfterMsOpt.HasValue && cancelAfterMsOpt.Value > 0)
+                cancellation.CancelAfter(cancelAfterMsOpt.Value);
+
+            var runContext = new RunContext(paths.RunId, paths.RunDir);
+            engine.RunTicks(
+                world,
+                seed: seed,
+                start: SimTime.Zero,
+                endInclusive: new SimTime(endTick),
+                options: options,
+                context: runContext,
+                cancellationToken: cancellation.Token);
             Console.WriteLine($"RunDir={paths.RunDir}");
             Console.WriteLine($"RunId={paths.RunId}");
             Console.WriteLine("ValidationOK");
-            Console.WriteLine($"Population={world.Population}, Fires={world.Fires}");
+            foreach (var line in adapter.DescribeState(world))
+                Console.WriteLine(line);
             return 0;
         }
         catch (InvariantViolationException ex)
@@ -167,5 +196,28 @@ public sealed class ValidateRunCommand : ICliCommand
 
         index++;
         return CliParsing.TryParseInt(args[index], out value);
+    }
+
+    private static bool TryReadRngVersion(string[] args, ref int index, out RngVersion version)
+    {
+        version = default;
+        if (index + 1 >= args.Length)
+            return false;
+
+        index++;
+        var raw = args[index];
+        if (string.Equals(raw, "v1", StringComparison.OrdinalIgnoreCase))
+        {
+            version = RngVersion.V1;
+            return true;
+        }
+
+        if (string.Equals(raw, "v2", StringComparison.OrdinalIgnoreCase))
+        {
+            version = RngVersion.V2;
+            return true;
+        }
+
+        return false;
     }
 }
