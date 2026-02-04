@@ -4,6 +4,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <PackageDescription>Core primitives for deterministic tick-based simulations: time, commands/events, scheduling, and RNG interfaces.</PackageDescription>
+    <PackageTags>epochsim;deterministic;simulation;tick;time;events;scheduler;rng;engine;game</PackageTags>
+    <Authors>Echways</Authors>
+    <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 
 </Project>

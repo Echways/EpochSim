@@ -10,6 +10,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <PackageDescription>Simulation engine and execution pipeline for EpochSim, including replay, snapshots, and run limits.</PackageDescription>
+    <PackageTags>epochsim;deterministic;simulation;engine;execution;replay;snapshots;invariants;middleware</PackageTags>
+    <Authors>Echways</Authors>
+    <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
 
 </Project>

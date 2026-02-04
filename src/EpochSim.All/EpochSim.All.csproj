@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <PackageType>Dependency</PackageType>
+
+    <PackageId>EpochSim.All</PackageId>
+    <PackageDescription>Meta-package that references the core EpochSim libraries (Kernel, Execution, Serialization, Observability).</PackageDescription>
+    <PackageTags>epochsim;meta;all;deterministic;simulation</PackageTags>
+    <Authors>Echways</Authors>
+    <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EpochSim.Kernel" Version="$(Version)" />
+    <PackageReference Include="EpochSim.Execution" Version="$(Version)" />
+    <PackageReference Include="EpochSim.Serialization" Version="$(Version)" />
+    <PackageReference Include="EpochSim.Observability" Version="$(Version)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>
