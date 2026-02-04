@@ -1,24 +1,25 @@
 using System;
 using System.Collections.Generic;
 using EpochSim.Cli.App;
+using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
 using EpochSim.Execution.StateFingerprint;
-using EpochSim.Samples.Population;
+using EpochSim.Kernel.Determinism;
 
 namespace EpochSim.Cli.Commands;
 
-public sealed class VerifyRunCommand : ICliCommand
+public sealed class VerifyRunCommand : DomainCommandBase
 {
-    public int Execute(CommandContext ctx, string[] args)
+    protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
         var runArg = args.Length > 0 ? args[0] : "";
 
-        var codec = ctx.Codec;
-        var stateSerializer = ctx.StateSerializer;
+        var codec = adapter.Codec;
+        var stateSerializer = adapter.Serializer;
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = CliParsing.Paths(ctx.Root, runId);
@@ -41,12 +42,17 @@ public sealed class VerifyRunCommand : ICliCommand
 
         var expected = JsonlStateFingerprintWriter.ReadAll(paths.StateFpPath);
 
-        var engine = new SimulationEngine<WorldState>();
-        engine.AddSystem(new PopulationSystem());
+        var engine = new SimulationEngine<TState>();
+        adapter.ConfigureEngine(engine);
 
         var sink = new InMemoryStateFingerprintSink();
-        var tmpState = new WorldState();
-        engine.AddMiddleware(new StateFingerprintMiddleware<WorldState>(tmpState, stateSerializer, sink, fingerprintEvery));
+        var tmpState = adapter.CreateInitialState();
+        engine.AddMiddleware(new StateFingerprintMiddleware<TState>(tmpState, stateSerializer, sink, fingerprintEvery));
+
+        var options = new RunOptions
+        {
+            RngVersion = ResolveRngVersion(manifest?.RngVersion)
+        };
 
         var replayed = SnapshotRunner.LoadBestAndReplayTo(
             engine: engine,
@@ -56,7 +62,9 @@ public sealed class VerifyRunCommand : ICliCommand
             codec: codec,
             seed: seed,
             endTick: endTick,
-            newState: () => tmpState);
+            newState: () => tmpState,
+            options: options,
+            cancellationToken: ctx.Cancellation);
 
         var mismatch = FindFirstMismatch(expected, sink.Records, endTick, fingerprintEvery);
 
@@ -68,7 +76,8 @@ public sealed class VerifyRunCommand : ICliCommand
         if (mismatch is null)
         {
             Console.WriteLine("VerifyOK");
-            Console.WriteLine($"Population={replayed.Population}, Fires={replayed.Fires}");
+            foreach (var line in adapter.DescribeState(replayed))
+                Console.WriteLine(line);
             return 0;
         }
 
@@ -110,5 +119,16 @@ public sealed class VerifyRunCommand : ICliCommand
         }
 
         return null;
+    }
+
+    private static RngVersion ResolveRngVersion(string? raw)
+    {
+        if (string.Equals(raw, "V1", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V1;
+
+        if (string.Equals(raw, "V2", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V2;
+
+        return RngVersion.V2;
     }
 }

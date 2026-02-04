@@ -16,7 +16,7 @@ public sealed class StateFingerprintMiddleware<TState>(
         if (time.Tick % intervalTicks != 0) return;
 
         var json = serializer.Serialize(state);
-        var fp = Serialization.State.StateFingerprint.ComputeFromJson(json);
+        var fp = EpochSim.Serialization.State.StateFingerprint.ComputeFromJson(json);
         sink.OnRecord(time.Tick, fp);
     }
 }

@@ -1,8 +1,8 @@
 using EpochSim.Cli.App;
+using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution.Diagnostics;
 using EpochSim.Execution.RunArtifacts;
-using EpochSim.Samples.Population;
 
 namespace EpochSim.Cli.Commands;
 
@@ -58,7 +58,7 @@ public sealed class TimelineCommand : ICliCommand
         var kindsFilter = CliParsing.ParseKindsOptions(args, argIndex);
 
         var formatter = new CompositeEventPayloadFormatter(
-            new PopulationEventPayloadFormatter(),
+            ctx.Adapter.PayloadFormatter,
             new JsonEventPayloadFormatter());
 
         Console.WriteLine($"RunDir={paths.RunDir}");

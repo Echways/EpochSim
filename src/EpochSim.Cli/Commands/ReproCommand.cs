@@ -1,26 +1,27 @@
 using System;
 using System.Collections.Generic;
 using EpochSim.Cli.App;
+using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
+using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
-using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.Snapshots;
 
 namespace EpochSim.Cli.Commands;
 
-public sealed class ReproCommand : ICliCommand
+public sealed class ReproCommand : DomainCommandBase
 {
-    public int Execute(CommandContext ctx, string[] args)
+    protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
         var runArg = args.Length > 0 ? args[0] : "";
 
-        var codec = ctx.Codec;
-        var stateSerializer = ctx.StateSerializer;
+        var codec = adapter.Codec;
+        var stateSerializer = adapter.Serializer;
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = new RunPaths(ctx.Root, runId);
@@ -71,19 +72,22 @@ public sealed class ReproCommand : ICliCommand
         var snap = SnapshotReader.Read(snapshotPath);
         var world = stateSerializer.Deserialize(snap.StateJson);
 
-        var engine = new SimulationEngine<WorldState>();
-        engine.AddSystem(new PopulationSystem());
+        var engine = new SimulationEngine<TState>();
+        adapter.ConfigureEngine(engine);
 
         var memLog = new InMemoryEventLogMiddleware(codec);
         engine.AddMiddleware(memLog);
 
-        var invariants = new List<IInvariant<WorldState>>
-        {
-            new PopulationNonNegativeInvariant(),
-            new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
-        };
+        var invariants = new List<IInvariant<TState>>();
+        invariants.AddRange(adapter.CreateInvariants());
+        invariants.Add(new MaxEventsPerTickInvariant<TState>(() => memLog.EventsThisTick, maxEvents: 1000));
 
-        engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
+        engine.AddMiddleware(new InvariantMiddleware<TState>(world, invariants, checkEveryTicks: 1));
+
+        var options = new RunOptions
+        {
+            RngVersion = ResolveRngVersion(manifest?.RngVersion)
+        };
 
         try
         {
@@ -95,7 +99,9 @@ public sealed class ReproCommand : ICliCommand
                 start: new SimTime(snapshotTick + 1),
                 endInclusive: new SimTime(failureTick),
                 entries: entries,
-                codec: codec);
+                codec: codec,
+                options: options,
+                cancellationToken: ctx.Cancellation);
 
             Console.WriteLine($"RunDir={paths.RunDir}");
             Console.WriteLine($"RunId={paths.RunId}");
@@ -119,5 +125,16 @@ public sealed class ReproCommand : ICliCommand
             Console.WriteLine($"ReproMismatch_ExpectedTick={failureTick}_ActualTick={ex.Time.Tick}");
             return 3;
         }
+    }
+
+    private static RngVersion ResolveRngVersion(string? raw)
+    {
+        if (string.Equals(raw, "V1", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V1;
+
+        if (string.Equals(raw, "V2", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V2;
+
+        return RngVersion.V2;
     }
 }

@@ -5,6 +5,7 @@ using EpochSim.Kernel.Scheduling;
 using EpochSim.Kernel.Systems;
 using EpochSim.Kernel.Time;
 using EpochSim.Serialization.EventLog;
+using System.Threading;
 
 namespace EpochSim.Execution;
 
@@ -26,38 +27,66 @@ public sealed class SimulationEngine<TState>
         ulong seed,
         SimTime start,
         SimTime endInclusive,
-        RunOptions? options = null)
+        RunOptions? options = null,
+        RunContext? context = null,
+        CancellationToken cancellationToken = default)
     {
         options ??= new RunOptions();
         options.Validate();
 
-        var rng = new DeterministicRng(seed);
+        var rng = new DeterministicRng(seed, options.RngVersion);
         var time = start;
         var scheduler = new Scheduler(() => time);
+        var runInfo = new RunInfo(
+            Mode: RunMode.Run,
+            Seed: seed,
+            StartTick: start,
+            EndTickInclusive: endInclusive,
+            RunId: context?.RunId,
+            ArtifactDir: context?.ArtifactDir,
+            Options: options,
+            StrictReplay: false,
+            RngVersion: options.RngVersion.ToString());
 
-        while (time.Tick <= endInclusive.Tick)
+        try
         {
-            NotifyTickStart(time);
+            NotifyRunStart(runInfo);
 
-            var commands = new CommandBuffer();
-            var events = new EventBuffer();
-
-            DrainScheduledAt(time, scheduler, events);
-
-            var tickCtx = new TickContext<TState>(time, state, scheduler, commands, rng);
-
-            foreach (var sys in _systems)
+            while (time.Tick <= endInclusive.Tick)
             {
-                NotifySystemTickStart(time, sys.Name);
-                sys.Tick(tickCtx);
-                NotifySystemTickEnd(time, sys.Name);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                NotifyTickStart(time);
+
+                var commands = new CommandBuffer();
+                var events = new EventBuffer();
+
+                DrainScheduledAt(time, scheduler, events);
+
+                var tickCtx = new TickContext<TState>(time, state, scheduler, commands, rng, cancellationToken);
+
+                foreach (var sys in _systems)
+                {
+                    NotifySystemTickStart(time, sys.Name);
+                    sys.Tick(tickCtx);
+                    NotifySystemTickEnd(time, sys.Name);
+                }
+
+                RunPump(time, state, scheduler, commands, events, rng, options, cancellationToken);
+
+                NotifyTickEnd(time);
+
+                time = time.AddTicks(1);
             }
-
-            RunPump(time, state, scheduler, commands, events, rng, options);
-
-            NotifyTickEnd(time);
-
-            time = time.AddTicks(1);
+        }
+        catch (Exception ex)
+        {
+            NotifyRunFailed(runInfo, ex);
+            throw;
+        }
+        finally
+        {
+            NotifyRunEnd(runInfo);
         }
     }
 
@@ -68,40 +97,72 @@ public sealed class SimulationEngine<TState>
         SimTime endInclusive,
         EventLogIndex index,
         IEventCodecV2 codec,
-        bool strictReplay = false)
+        bool strictReplay = false,
+        RunOptions? options = null,
+        RunContext? context = null,
+        CancellationToken cancellationToken = default)
     {
-        var rng = new DeterministicRng(seed);
+        options ??= new RunOptions();
+        options.Validate();
+
+        var rng = new DeterministicRng(seed, options.RngVersion);
         var scheduler = new NullScheduler();
         var commands = new NullCommandBuffer();
         var time = start;
         IEventEmitter events = strictReplay
             ? new StrictReplayEventEmitter(() => time)
             : new NullEventEmitter();
+        var runInfo = new RunInfo(
+            Mode: RunMode.Replay,
+            Seed: seed,
+            StartTick: start,
+            EndTickInclusive: endInclusive,
+            RunId: context?.RunId,
+            ArtifactDir: context?.ArtifactDir,
+            Options: options,
+            StrictReplay: strictReplay,
+            RngVersion: options.RngVersion.ToString());
 
-        while (time.Tick <= endInclusive.Tick)
+        try
         {
-            NotifyTickStart(time);
+            NotifyRunStart(runInfo);
 
-            var atTick = index.GetAtTick(time.Tick);
-            if (atTick.Count > 0)
+            while (time.Tick <= endInclusive.Tick)
             {
-                var evtCtx = new EventContext<TState>(time, state, scheduler, commands, events, rng);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                for (int i = 0; i < atTick.Count; i++)
+                NotifyTickStart(time);
+
+                var atTick = index.GetAtTick(time.Tick);
+                if (atTick.Count > 0)
                 {
-                    var e = atTick[i];
+                    var evtCtx = new EventContext<TState>(time, state, scheduler, commands, events, rng, cancellationToken);
 
-                    if (!codec.TryDecode(e.Kind, e.PayloadJson, out var ev))
-                        throw new InvalidOperationException($"No codec for event kind {e.Kind}");
+                    for (int i = 0; i < atTick.Count; i++)
+                    {
+                        var e = atTick[i];
 
-                    NotifyEventDispatched(time, ev);
-                    DispatchToSystems(evtCtx, ev);
+                        if (!codec.TryDecode(e.Kind, e.PayloadJson, out var ev))
+                            throw new InvalidOperationException($"No codec for event kind {e.Kind}");
+
+                        NotifyEventDispatched(time, ev);
+                        DispatchToSystems(evtCtx, ev);
+                    }
                 }
+
+                NotifyTickEnd(time);
+
+                time = time.AddTicks(1);
             }
-
-            NotifyTickEnd(time);
-
-            time = time.AddTicks(1);
+        }
+        catch (Exception ex)
+        {
+            NotifyRunFailed(runInfo, ex);
+            throw;
+        }
+        finally
+        {
+            NotifyRunEnd(runInfo);
         }
     }
 
@@ -112,8 +173,11 @@ public sealed class SimulationEngine<TState>
         SimTime endInclusive,
         IReadOnlyList<EventLogEntryV2> entries,
         IEventCodecV2 codec,
-        bool strictReplay = false)
-        => ReplayFromLog(state, seed, start, endInclusive, new EventLogIndex(entries), codec, strictReplay);
+        bool strictReplay = false,
+        RunOptions? options = null,
+        RunContext? context = null,
+        CancellationToken cancellationToken = default)
+        => ReplayFromLog(state, seed, start, endInclusive, new EventLogIndex(entries), codec, strictReplay, options, context, cancellationToken);
 
     public void ReplayFromLogStream(
         TState state,
@@ -122,15 +186,31 @@ public sealed class SimulationEngine<TState>
         SimTime endInclusive,
         IEnumerable<EventLogEntryV2> entries,
         IEventCodecV2 codec,
-        bool strictReplay = false)
+        bool strictReplay = false,
+        RunOptions? options = null,
+        RunContext? context = null,
+        CancellationToken cancellationToken = default)
     {
-        var rng = new DeterministicRng(seed);
+        options ??= new RunOptions();
+        options.Validate();
+
+        var rng = new DeterministicRng(seed, options.RngVersion);
         var scheduler = new NullScheduler();
         var commands = new NullCommandBuffer();
         var time = start;
         IEventEmitter events = strictReplay
             ? new StrictReplayEventEmitter(() => time)
             : new NullEventEmitter();
+        var runInfo = new RunInfo(
+            Mode: RunMode.Replay,
+            Seed: seed,
+            StartTick: start,
+            EndTickInclusive: endInclusive,
+            RunId: context?.RunId,
+            ArtifactDir: context?.ArtifactDir,
+            Options: options,
+            StrictReplay: strictReplay,
+            RngVersion: options.RngVersion.ToString());
 
         using var enumerator = entries.GetEnumerator();
         var hasEntry = enumerator.MoveNext();
@@ -138,36 +218,52 @@ public sealed class SimulationEngine<TState>
         while (hasEntry && enumerator.Current.Tick < start.Tick)
             hasEntry = enumerator.MoveNext();
 
-        while (time.Tick <= endInclusive.Tick)
+        try
         {
-            NotifyTickStart(time);
+            NotifyRunStart(runInfo);
 
-            if (hasEntry && enumerator.Current.Tick < time.Tick)
-                throw new InvalidOperationException($"Event log out of order at tick {enumerator.Current.Tick} (current={time.Tick}).");
-
-            if (hasEntry && enumerator.Current.Tick == time.Tick)
+            while (time.Tick <= endInclusive.Tick)
             {
-                var evtCtx = new EventContext<TState>(time, state, scheduler, commands, events, rng);
+                cancellationToken.ThrowIfCancellationRequested();
 
-                while (hasEntry && enumerator.Current.Tick == time.Tick)
+                NotifyTickStart(time);
+
+                if (hasEntry && enumerator.Current.Tick < time.Tick)
+                    throw new InvalidOperationException($"Event log out of order at tick {enumerator.Current.Tick} (current={time.Tick}).");
+
+                if (hasEntry && enumerator.Current.Tick == time.Tick)
                 {
-                    var e = enumerator.Current;
+                    var evtCtx = new EventContext<TState>(time, state, scheduler, commands, events, rng, cancellationToken);
 
-                    if (!codec.TryDecode(e.Kind, e.PayloadJson, out var ev))
-                        throw new InvalidOperationException($"No codec for event kind {e.Kind}");
+                    while (hasEntry && enumerator.Current.Tick == time.Tick)
+                    {
+                        var e = enumerator.Current;
 
-                    NotifyEventDispatched(time, ev);
-                    DispatchToSystems(evtCtx, ev);
+                        if (!codec.TryDecode(e.Kind, e.PayloadJson, out var ev))
+                            throw new InvalidOperationException($"No codec for event kind {e.Kind}");
 
-                    hasEntry = enumerator.MoveNext();
-                    if (hasEntry && enumerator.Current.Tick < time.Tick)
-                        throw new InvalidOperationException($"Event log out of order at tick {enumerator.Current.Tick} (current={time.Tick}).");
+                        NotifyEventDispatched(time, ev);
+                        DispatchToSystems(evtCtx, ev);
+
+                        hasEntry = enumerator.MoveNext();
+                        if (hasEntry && enumerator.Current.Tick < time.Tick)
+                            throw new InvalidOperationException($"Event log out of order at tick {enumerator.Current.Tick} (current={time.Tick}).");
+                    }
                 }
+
+                NotifyTickEnd(time);
+
+                time = time.AddTicks(1);
             }
-
-            NotifyTickEnd(time);
-
-            time = time.AddTicks(1);
+        }
+        catch (Exception ex)
+        {
+            NotifyRunFailed(runInfo, ex);
+            throw;
+        }
+        finally
+        {
+            NotifyRunEnd(runInfo);
         }
     }
 
@@ -220,31 +316,40 @@ public sealed class SimulationEngine<TState>
         CommandBuffer commands,
         EventBuffer events,
         DeterministicRng rng,
-        RunOptions options)
+        RunOptions options,
+        CancellationToken cancellationToken)
     {
         var pumpSteps = 0;
         var eventsDispatched = 0;
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             pumpSteps++;
             if (pumpSteps > options.MaxPumpStepsPerTick)
                 throw new InvalidOperationException(
                     $"Tick {time.Tick} exceeded MaxPumpStepsPerTick={options.MaxPumpStepsPerTick} (steps={pumpSteps}, eventsDispatched={eventsDispatched}).");
 
             var drainedCommands = commands.Drain();
-            if (drainedCommands.Count > 0)
+            var hadCommands = drainedCommands.Count > 0;
+            if (hadCommands)
+            {
                 _commandRouter.DispatchAll(
                     state,
                     drainedCommands,
                     events,
                     before: (name, cmd) => NotifyCommandHandlerStart(time, name, cmd),
                     after: (name, cmd) => NotifyCommandHandlerEnd(time, name, cmd));
+                if (drainedCommands is List<ICommand> commandList)
+                    commandList.Clear();
+            }
 
             var drainedEvents = events.Drain();
-            if (drainedEvents.Count > 0)
+            var hadEvents = drainedEvents.Count > 0;
+            if (hadEvents)
             {
-                var evtCtxNow = new EventContext<TState>(time, state, scheduler, commands, events, rng);
+                var evtCtxNow = new EventContext<TState>(time, state, scheduler, commands, events, rng, cancellationToken);
 
                 foreach (var ev in drainedEvents)
                 {
@@ -256,11 +361,32 @@ public sealed class SimulationEngine<TState>
 
                     DispatchToSystems(evtCtxNow, ev);
                 }
+
+                if (drainedEvents is List<IEvent> eventList)
+                    eventList.Clear();
             }
 
-            if (drainedCommands.Count == 0 && drainedEvents.Count == 0)
+            if (!hadCommands && !hadEvents)
                 break;
         }
+    }
+
+    private void NotifyRunStart(RunInfo info)
+    {
+        foreach (var middleware in _middleware)
+            middleware.OnRunStart(info);
+    }
+
+    private void NotifyRunEnd(RunInfo info)
+    {
+        foreach (var middleware in _middleware)
+            middleware.OnRunEnd(info);
+    }
+
+    private void NotifyRunFailed(RunInfo info, Exception exception)
+    {
+        foreach (var middleware in _middleware)
+            middleware.OnRunFailed(info, exception);
     }
 
     private void NotifyTickStart(SimTime time)

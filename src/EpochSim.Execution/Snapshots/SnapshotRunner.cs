@@ -1,3 +1,4 @@
+using System.Threading;
 using EpochSim.Kernel.Time;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.Snapshots;
@@ -15,7 +16,9 @@ public static class SnapshotRunner
         IEventCodecV2 codec,
         ulong seed,
         long endTick,
-        Func<TState> newState)
+        Func<TState> newState,
+        RunOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
         var snapshotPath = SnapshotLocator.FindBestSnapshot(snapshotsDir, endTick);
 
@@ -38,7 +41,15 @@ public static class SnapshotRunner
             ? EventLogReader.ReadStream(eventsPath)
             : EventLogReader.ReadStream(eventsPath).Where(e => e.Tick > startTick - 1);
 
-        engine.ReplayFromLogStream(state, seed, new SimTime(startTick), new SimTime(endTick), entries, codec);
+        engine.ReplayFromLogStream(
+            state,
+            seed,
+            new SimTime(startTick),
+            new SimTime(endTick),
+            entries,
+            codec,
+            options: options,
+            cancellationToken: cancellationToken);
         return state;
     }
 }

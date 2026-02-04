@@ -55,6 +55,44 @@ public sealed class SimulationEngineSemanticsTests
     }
 
     [Fact]
+    public void SystemOrder_EqualsRegistrationOrder()
+    {
+        var state = new OrderState();
+        var engine = new SimulationEngine<OrderState>();
+        engine.AddSystem(new OrderedLogSystem("one"));
+        engine.AddSystem(new OrderedLogSystem("two"));
+
+        engine.RunTicks(state, seed: 1, start: SimTime.Zero, endInclusive: new SimTime(0));
+
+        Assert.Equal(new[] { "tick:one", "tick:two" }, state.Log);
+    }
+
+    [Fact]
+    public void SamePhaseEvents_DispatchInStableOrder()
+    {
+        var state = new OrderState();
+        var engine = new SimulationEngine<OrderState>();
+        engine.AddSystem(new EmitTwoEventsSystem());
+        engine.RegisterCommandHandler(new EmitTwoEventsCommandHandler());
+
+        engine.RunTicks(state, seed: 1, start: SimTime.Zero, endInclusive: new SimTime(0));
+
+        Assert.Equal(new[] { "A", "B" }, state.Log);
+    }
+
+    [Fact]
+    public void Scheduler_SameTick_OrderIsStable()
+    {
+        var state = new OrderState();
+        var engine = new SimulationEngine<OrderState>();
+        engine.AddSystem(new ScheduleTwoEventsSystem());
+
+        engine.RunTicks(state, seed: 1, start: SimTime.Zero, endInclusive: new SimTime(1));
+
+        Assert.Equal(new[] { "A", "B" }, state.Log);
+    }
+
+    [Fact]
     public void ScheduleAt_CurrentTick_Throws()
     {
         var state = new OrderState();
@@ -228,6 +266,67 @@ public sealed class SimulationEngineSemanticsTests
         }
     }
 
+    private sealed class OrderedLogSystem(string label) : ISystem<OrderState>
+    {
+        public string Name => $"log-{label}";
+
+        public void Tick(TickContext<OrderState> ctx)
+            => ctx.State.Log.Add($"tick:{label}");
+
+        public void Handle(EventContext<OrderState> ctx, IEvent ev) { }
+    }
+
+    private sealed class EmitTwoEventsSystem : ISystem<OrderState>
+    {
+        public string Name => "emit-two-events";
+
+        public void Tick(TickContext<OrderState> ctx)
+        {
+            if (ctx.Time.Tick == 0)
+                ctx.Commands.Enqueue(new EmitTwoEventsCommand());
+        }
+
+        public void Handle(EventContext<OrderState> ctx, IEvent ev)
+        {
+            switch (ev)
+            {
+                case TestEventA:
+                    ctx.State.Log.Add("A");
+                    break;
+                case TestEventB:
+                    ctx.State.Log.Add("B");
+                    break;
+            }
+        }
+    }
+
+    private sealed class ScheduleTwoEventsSystem : ISystem<OrderState>
+    {
+        public string Name => "schedule-two-events";
+
+        public void Tick(TickContext<OrderState> ctx)
+        {
+            if (ctx.Time.Tick == 0)
+            {
+                ctx.Scheduler.ScheduleNextTick(new TestEventA());
+                ctx.Scheduler.ScheduleNextTick(new TestEventB());
+            }
+        }
+
+        public void Handle(EventContext<OrderState> ctx, IEvent ev)
+        {
+            switch (ev)
+            {
+                case TestEventA:
+                    ctx.State.Log.Add("A");
+                    break;
+                case TestEventB:
+                    ctx.State.Log.Add("B");
+                    break;
+            }
+        }
+    }
+
     private sealed class EmitDuringHandleSystem : ISystem<OrderState>
     {
         public string Name => "emit-during-handle";
@@ -311,6 +410,15 @@ public sealed class SimulationEngineSemanticsTests
             => events.Emit(new TestEventB());
     }
 
+    private sealed class EmitTwoEventsCommandHandler : ICommandHandler<OrderState, EmitTwoEventsCommand>
+    {
+        public void Handle(OrderState state, EmitTwoEventsCommand command, IEventBuffer events)
+        {
+            events.Emit(new TestEventA());
+            events.Emit(new TestEventB());
+        }
+    }
+
     private sealed class MutateCommandHandler : ICommandHandler<MutationState, MutateCommand>
     {
         public void Handle(MutationState state, MutateCommand command, IEventBuffer events)
@@ -330,6 +438,11 @@ public sealed class SimulationEngineSemanticsTests
     private sealed record FollowupCommand() : ICommand
     {
         public string Kind => "Followup";
+    }
+
+    private sealed record EmitTwoEventsCommand() : ICommand
+    {
+        public string Kind => "EmitTwo";
     }
 
     private sealed record MutateCommand() : ICommand

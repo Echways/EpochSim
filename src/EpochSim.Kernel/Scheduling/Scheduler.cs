@@ -8,7 +8,8 @@ namespace EpochSim.Kernel.Scheduling;
 public sealed class Scheduler : IScheduler
 {
     private long _sequence = 0;
-    private readonly SortedSet<ScheduledItem> _queue = new(new ScheduledItemComparer());
+    private readonly PriorityQueue<ScheduledItem, ScheduledPriority> _queue =
+        new(new ScheduledPriorityComparer());
     private readonly Func<SimTime> _currentTimeProvider;
 
     public Scheduler(Func<SimTime> currentTimeProvider)
@@ -22,7 +23,8 @@ public sealed class Scheduler : IScheduler
         if (time.Tick <= current.Tick)
             throw new InvalidOperationException($"ScheduleAt requires targetTick > currentTick (target={time.Tick}, current={current.Tick}).");
 
-        _queue.Add(new ScheduledItem(time, ++_sequence, ev));
+        var seq = ++_sequence;
+        _queue.Enqueue(new ScheduledItem(time, seq, ev), new ScheduledPriority(time.Tick, seq));
     }
 
     public void ScheduleNextTick(IEvent ev) => ScheduleInTicks(1, ev);
@@ -39,19 +41,28 @@ public sealed class Scheduler : IScheduler
 
     public bool TryDequeue(out ScheduledItem item)
     {
-        if (_queue.Count == 0) { item = default; return false; }
-        item = _queue.Min!;
-        _queue.Remove(item);
-        return true;
+        if (_queue.TryDequeue(out item, out _))
+            return true;
+
+        item = default;
+        return false;
     }
 
-    public SimTime? PeekTime() => _queue.Count == 0 ? null : _queue.Min!.Time;
-
-    private sealed class ScheduledItemComparer : IComparer<ScheduledItem>
+    public SimTime? PeekTime()
     {
-        public int Compare(ScheduledItem a, ScheduledItem b)
+        if (_queue.TryPeek(out var item, out _))
+            return item.Time;
+
+        return null;
+    }
+
+    private readonly record struct ScheduledPriority(long Tick, long Seq);
+
+    private sealed class ScheduledPriorityComparer : IComparer<ScheduledPriority>
+    {
+        public int Compare(ScheduledPriority a, ScheduledPriority b)
         {
-            var timeComparison = a.Time.Tick.CompareTo(b.Time.Tick);
+            var timeComparison = a.Tick.CompareTo(b.Tick);
             if (timeComparison != 0) return timeComparison;
             return a.Seq.CompareTo(b.Seq);
         }

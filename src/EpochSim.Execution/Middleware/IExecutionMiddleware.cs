@@ -1,10 +1,15 @@
-using EpochSim.Kernel.Time;
+using EpochSim.Execution;
 using EpochSim.Kernel.Messaging;
+using EpochSim.Kernel.Time;
 
 namespace EpochSim.Execution.Middleware;
 
 public interface IExecutionMiddleware
 {
+    void OnRunStart(RunInfo info) { }
+    void OnRunEnd(RunInfo info) { }
+    void OnRunFailed(RunInfo info, Exception exception) { }
+
     void OnTickStart(SimTime time) { }
     void OnTickEnd(SimTime time) { }
 

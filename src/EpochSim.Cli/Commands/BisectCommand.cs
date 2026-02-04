@@ -1,26 +1,27 @@
 using System;
 using System.Collections.Generic;
 using EpochSim.Cli.App;
+using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
+using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Validation;
-using EpochSim.Samples.Population;
 
 namespace EpochSim.Cli.Commands;
 
-public sealed class BisectCommand : ICliCommand
+public sealed class BisectCommand : DomainCommandBase
 {
-    public int Execute(CommandContext ctx, string[] args)
+    protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
         var runArg = args.Length > 0 ? args[0] : "";
         var endTickArg = args.Length > 1 ? args[1] : null;
         var seedArg = args.Length > 3 ? args[3] : null;
 
-        var codec = ctx.Codec;
-        var stateSerializer = ctx.StateSerializer;
+        var codec = adapter.Codec;
+        var stateSerializer = adapter.Serializer;
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = new RunPaths(ctx.Root, runId);
@@ -44,22 +45,25 @@ public sealed class BisectCommand : ICliCommand
         if (!Directory.Exists(paths.SnapshotsDir))
             Directory.CreateDirectory(paths.SnapshotsDir);
 
+        var options = new RunOptions
+        {
+            RngVersion = ResolveRngVersion(manifest?.RngVersion)
+        };
+
         bool FailsUpTo(long probeTick, out InvariantViolationException? ex)
         {
-            var engine = new SimulationEngine<WorldState>();
-            engine.AddSystem(new PopulationSystem());
+            var engine = new SimulationEngine<TState>();
+            adapter.ConfigureEngine(engine);
 
             var memLog = new InMemoryEventLogMiddleware(codec);
             engine.AddMiddleware(memLog);
 
-            var invariants = new List<IInvariant<WorldState>>
-            {
-                new PopulationNonNegativeInvariant(),
-                new MaxEventsPerTickInvariant<WorldState>(() => memLog.EventsThisTick, maxEvents: 1000)
-            };
+            var invariants = new List<IInvariant<TState>>();
+            invariants.AddRange(adapter.CreateInvariants());
+            invariants.Add(new MaxEventsPerTickInvariant<TState>(() => memLog.EventsThisTick, maxEvents: 1000));
 
-            var world = new WorldState();
-            engine.AddMiddleware(new InvariantMiddleware<WorldState>(world, invariants, checkEveryTicks: 1));
+            var world = adapter.CreateInitialState();
+            engine.AddMiddleware(new InvariantMiddleware<TState>(world, invariants, checkEveryTicks: 1));
 
             try
             {
@@ -71,7 +75,9 @@ public sealed class BisectCommand : ICliCommand
                     codec: codec,
                     seed: seed,
                     endTick: probeTick,
-                    newState: () => world);
+                    newState: () => world,
+                    options: options,
+                    cancellationToken: ctx.Cancellation);
 
                 ex = null;
                 return false;
@@ -124,12 +130,23 @@ public sealed class BisectCommand : ICliCommand
                 invariantName: exFinal.InvariantName,
                 invariantMessage: exFinal.Detail,
                 serializer: stateSerializer,
-                newState: () => new WorldState());
+                newState: adapter.CreateInitialState);
 
             Console.WriteLine($"MinReproDir={minDir}");
             Console.WriteLine("MinReproFiles=snapshot.json,events.jsonl,meta.txt");
         }
 
         return 2;
+    }
+
+    private static RngVersion ResolveRngVersion(string? raw)
+    {
+        if (string.Equals(raw, "V1", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V1;
+
+        if (string.Equals(raw, "V2", StringComparison.OrdinalIgnoreCase))
+            return RngVersion.V2;
+
+        return RngVersion.V2;
     }
 }
