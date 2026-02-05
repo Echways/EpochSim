@@ -2,25 +2,31 @@
 
 Детерминированный движок тиковых симуляций на C# с журналом событий, воспроизведением, снапшотами и инструментами анализа.
 
-## Зачем
-EpochSim полезен, когда нужно:
-- гарантировать повторяемость результатов при одинаковых входных данных;
-- логировать все события и уметь воспроизводить симуляцию;
+## Что это
+EpochSim — библиотека и набор инструментов для симуляций, где важна воспроизводимость.  
+Один и тот же вход, seed и диапазон тиков всегда дают идентичный результат.
+
+## Когда подходит
+EpochSim полезен, если нужно:
+- гарантировать повторяемость результатов;
+- логировать события и воспроизводить прогоны;
 - быстро перематывать состояние с помощью снапшотов;
-- иметь воспроизводимые тесты и удобные CLI‑инструменты.
+- получать удобные артефакты для анализа и тестов.
 
 ## Установка (NuGet)
-Основные пакеты:
-- `EpochSim.Kernel`
-- `EpochSim.Execution`
-- `EpochSim.Serialization`
-- `EpochSim.Observability`
-
-Метапакет:
-- `EpochSim.All` — подтягивает основные пакеты одним зависимым.
+Самый простой вариант — метапакет:
 ```bash
-dotnet add package EmberTrace.All
+dotnet add package EpochSim.All
 ```
+
+Если нужен более тонкий контроль, используйте отдельные пакеты:
+- `EpochSim.Kernel` — время, события, планировщик, RNG
+- `EpochSim.Execution` — движок и middleware
+- `EpochSim.Serialization` — event log, снапшоты, сериализация
+- `EpochSim.Observability` — трассировка
+
+Минимальный набор для запуска симуляции: `EpochSim.Kernel` + `EpochSim.Execution`.  
+Для логов и воспроизведения добавьте `EpochSim.Serialization`, для трассировки — `EpochSim.Observability`.
 
 CLI как .NET tool:
 ```bash
@@ -28,10 +34,57 @@ dotnet tool install -g EpochSim.Cli
 epochsim --help
 ```
 
-`EpochSim.Samples` — демо‑домен, на NuGet не публикуется.
+`EpochSim.Samples` — демо‑домен Population, на NuGet не публикуется.
 
-## Быстрый старт
-Примеры ниже используют демо‑домен Population.
+## Быстрый старт (встраивание в свой проект)
+Минимальный сценарий: определяем состояние, команды/события и систему, затем запускаем движок.
+
+```csharp
+public sealed class WorldState
+{
+    public int Value { get; set; }
+}
+
+public sealed record IncCommand(int Delta) : ICommand { public string Kind => "Inc"; }
+public sealed record ValueChanged(int Delta) : IEvent { public string Kind => "ValueChanged"; }
+
+public sealed class IncHandler : ICommandHandler<WorldState, IncCommand>
+{
+    public void Handle(WorldState state, IncCommand command, IEventBuffer events)
+        => events.Emit(new ValueChanged(command.Delta));
+}
+
+public sealed class WorldSystem : ISystem<WorldState>
+{
+    public string Name => "world";
+
+    public void Tick(TickContext<WorldState> ctx)
+    {
+        if (ctx.Time.Tick == 0)
+            ctx.Commands.Enqueue(new IncCommand(5));
+    }
+
+    public void Handle(EventContext<WorldState> ctx, IEvent ev)
+    {
+        if (ev is ValueChanged e)
+            ctx.State.Value += e.Delta;
+    }
+}
+```
+
+Запуск:
+```csharp
+var engine = new SimulationEngine<WorldState>();
+engine.AddSystem(new WorldSystem());
+engine.RegisterCommandHandler(new IncHandler());
+
+var state = new WorldState();
+engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(100));
+```
+
+## Быстрый старт (CLI)
+CLI не зависит от конкретного домена — он работает через `IDomainAdapter`.  
+В репозитории есть демо‑домен Population; примеры ниже используют его.
 
 Запуск симуляции и запись артефактов в `artifacts/`:
 ```bash
@@ -96,54 +149,6 @@ dotnet run --project src/EpochSim.Cli bisect artifacts <runId>
 - **Replay:** в strict‑режиме `Emit` запрещён.
 
 Подробно: [DeterminismContract](DeterminismContract.md).
-
-## Пример API
-```csharp
-public sealed class WorldState
-{
-    public int Value { get; set; }
-}
-
-public sealed record IncCommand(int Delta) : ICommand { public string Kind => "Inc"; }
-public sealed record ValueChanged(int Delta) : IEvent { public string Kind => "ValueChanged"; }
-
-public sealed class IncHandler : ICommandHandler<WorldState, IncCommand>
-{
-    public void Handle(WorldState state, IncCommand command, IEventBuffer events)
-        => events.Emit(new ValueChanged(command.Delta));
-}
-
-public sealed class WorldSystem : ISystem<WorldState>
-{
-    public string Name => "world";
-
-    public void Tick(TickContext<WorldState> ctx)
-    {
-        if (ctx.Time.Tick == 0)
-            ctx.Commands.Enqueue(new IncCommand(5));
-    }
-
-    public void Handle(EventContext<WorldState> ctx, IEvent ev)
-    {
-        if (ev is ValueChanged e)
-        {
-            ctx.State.Value += e.Delta;
-            // Немедленное событие в текущем тике:
-            // ctx.Events.Emit(new SomeEvent(...));
-        }
-    }
-}
-```
-
-Запуск:
-```csharp
-var engine = new SimulationEngine<WorldState>();
-engine.AddSystem(new WorldSystem());
-engine.RegisterCommandHandler(new IncHandler());
-
-var state = new WorldState();
-engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(100));
-```
 
 ## Воспроизведение
 ```csharp
