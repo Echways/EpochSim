@@ -4,14 +4,10 @@ using EpochSim.Cli.App;
 using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
-using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
-using EpochSim.Execution.Snapshots;
-using EpochSim.Execution.StateFingerprint;
+using EpochSim.Hosting;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
-using EpochSim.Observability.Tracing;
-using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Cli.Commands;
 
@@ -78,35 +74,29 @@ public sealed class RunCommand : DomainCommandBase
         var stateSerializer = adapter.Serializer;
 
         var runId = string.IsNullOrWhiteSpace(runArg) ? RunId.New() : CliParsing.NormalizeRunId(runArg);
-        var paths = new RunPaths(ctx.Root, runId);
-        paths.Ensure();
-        RunMetaWriter.Write(paths, mode: "run", seed: seed, endTick: endTick, snapEvery: snapEvery, fingerprintEvery: fingerprintEvery);
 
         var engine = new SimulationEngine<TState>();
         adapter.ConfigureEngine(engine);
 
-        var traceSink = new InMemoryTraceSink();
-        engine.AddMiddleware(new TraceMiddleware(traceSink));
-
-        var eventsPath = compress ? paths.EventsPathGz : paths.EventsPath;
-        using var eventWriter = new EventLogWriter(eventsPath);
-        engine.AddMiddleware(new EventLogMiddleware(eventWriter, codec));
-
         var world = adapter.CreateInitialState();
 
-        using var fpWriter = new JsonlStateFingerprintWriter(paths.StateFpPath);
-        engine.AddMiddleware(new StateFingerprintMiddleware<TState>(world, stateSerializer, fpWriter, fingerprintEvery));
+        var runBuilder = EpochSimRun.For(world)
+            .WithRootDirectory(ctx.Root)
+            .WithRunId(runId)
+            .WithCompression(compress)
+            .WithEventLog(codec)
+            .WithTraceJsonl()
+            .WithStateFingerprints(stateSerializer, fingerprintEvery)
+            .WithFailureArtifacts(stateSerializer, codec, tailSize: 200);
+
+        if (snapEvery > 0)
+            runBuilder.WithSnapshots(stateSerializer, snapEvery);
 
         if (guardState)
-            engine.AddMiddleware(new StateMutationGuardMiddleware<TState>(world, stateSerializer));
+            runBuilder.WithStateMutationGuard(stateSerializer);
 
-        engine.AddMiddleware(new FailureArtifactsMiddleware<TState>(
-            world,
-            stateSerializer,
-            codec,
-            snapshotEnabled: snapEvery > 0));
-
-        engine.AddMiddleware(new SnapshotMiddleware<TState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
+        using var run = runBuilder.Build();
+        run.AttachTo(engine);
 
         var defaults = new RunOptions();
         var options = new RunOptions
@@ -116,49 +106,23 @@ public sealed class RunCommand : DomainCommandBase
             RngVersion = rngVersionOpt ?? defaults.RngVersion
         };
 
-        var manifest = new RunManifest(
-            EngineVersion: RunManifestWriter.GetEngineVersion(),
-            RunMode: RunMode.Run.ToString(),
-            Seed: seed,
-            StartTick: 0,
-            EndTick: endTick,
-            EventLogVersion: 2,
-            RngVersion: options.RngVersion.ToString(),
-            SnapshotEvery: snapEvery,
-            FingerprintEvery: fingerprintEvery,
-            MaxPumpStepsPerTick: options.MaxPumpStepsPerTick,
-            MaxEventsPerTick: options.MaxEventsPerTick,
-            StrictReplay: false,
-            BuildTimestampUtc: DateTime.UtcNow);
-
-        RunManifestWriter.Write(paths.ManifestPath, manifest);
-
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ctx.Cancellation);
         if (cancelAfterMsOpt.HasValue && cancelAfterMsOpt.Value > 0)
             cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
-        var runContext = new RunContext(paths.RunId, paths.RunDir);
         engine.RunTicks(
             world,
             seed: seed,
             start: SimTime.Zero,
             endInclusive: new SimTime(endTick),
             options: options,
-            context: runContext,
+            context: run.Context,
             cancellationToken: cancellation.Token);
 
-        var tracePath = compress ? paths.TracePathGz : paths.TracePath;
-        using (var writer = new JsonlTraceWriter(tracePath))
-        {
-            foreach (var r in traceSink.Records)
-                writer.Write(r);
-        }
-
-        Console.WriteLine($"RunDir={paths.RunDir}");
-        Console.WriteLine($"RunId={paths.RunId}");
+        Console.WriteLine($"RunDir={run.Paths.RunDir}");
+        Console.WriteLine($"RunId={run.RunId}");
         foreach (var line in adapter.DescribeState(world))
             Console.WriteLine(line);
-        Console.WriteLine($"TraceFingerprint={TraceFingerprint.Compute(traceSink.Records)}");
 
         return 0;
     }

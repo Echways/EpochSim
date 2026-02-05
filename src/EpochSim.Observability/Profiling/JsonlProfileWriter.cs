@@ -16,8 +16,9 @@ public sealed class JsonlProfileWriter : IDisposable
     {
         _writer.Write("{\"t\":");
         _writer.Write(r.Time.Tick);
-        _writer.Write(",\"system\":");
-        _writer.Write(JsonEscape(r.SystemName));
+        _writer.Write(",\"system\":\"");
+        WriteEscaped(r.SystemName);
+        _writer.Write('"');
         _writer.Write(",\"elapsed\":");
         _writer.Write(r.ElapsedStopwatchTicks);
         _writer.WriteLine("}");
@@ -31,23 +32,31 @@ public sealed class JsonlProfileWriter : IDisposable
         _writer.Dispose();
     }
 
-    private static string JsonEscape(string s)
+    private void WriteEscaped(ReadOnlySpan<char> s)
     {
-        var builder = new StringBuilder(s.Length + 8);
-        builder.Append('"');
         foreach (var ch in s)
         {
-            builder.Append(ch switch
+            switch (ch)
             {
-                '"' => "\\\"",
-                '\\' => "\\\\",
-                '\n' => "\\n",
-                '\r' => "\\r",
-                '\t' => "\\t",
-                _ => ch
-            });
+                case '"':
+                    _writer.Write("\\\"");
+                    break;
+                case '\\':
+                    _writer.Write("\\\\");
+                    break;
+                case '\n':
+                    _writer.Write("\\n");
+                    break;
+                case '\r':
+                    _writer.Write("\\r");
+                    break;
+                case '\t':
+                    _writer.Write("\\t");
+                    break;
+                default:
+                    _writer.Write(ch);
+                    break;
+            }
         }
-        builder.Append('"');
-        return builder.ToString();
     }
 }

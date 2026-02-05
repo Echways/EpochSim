@@ -72,7 +72,7 @@ public static class CliParsing
 
         var dirs = Directory.GetDirectories(root)
             .Select(path => new DirectoryInfo(path))
-            .OrderByDescending(dir => dir.Name)
+            .OrderByDescending(dir => dir.Name, NumericOrderingStringComparer.Instance)
             .ToArray();
 
         if (dirs.Length == 0)
@@ -89,7 +89,7 @@ public static class CliParsing
         {
             var id = NormalizeRunId(runArg);
             var dir = Path.Combine(root, id);
-            var events = Path.Combine(dir, "events.jsonl");
+            var events = Path.Combine(dir, RunPaths.EventsFileName);
             var eventsGz = events + ".gz";
             if (!File.Exists(events) && !File.Exists(eventsGz))
                 throw new FileNotFoundException($"events log not found for run: {dir}");
@@ -101,11 +101,11 @@ public static class CliParsing
 
         var dirs = Directory.GetDirectories(root)
             .Select(path => new DirectoryInfo(path))
-            .OrderByDescending(dir => dir.Name);
+            .OrderByDescending(dir => dir.Name, NumericOrderingStringComparer.Instance);
 
         foreach (var dir in dirs)
         {
-            var events = Path.Combine(dir.FullName, "events.jsonl");
+            var events = Path.Combine(dir.FullName, RunPaths.EventsFileName);
             var eventsGz = events + ".gz";
             if (File.Exists(events) || File.Exists(eventsGz))
                 return dir.Name;
@@ -118,7 +118,7 @@ public static class CliParsing
     {
         var dirs = Directory.GetDirectories(minRoot)
             .Select(path => new DirectoryInfo(path))
-            .OrderByDescending(dir => dir.Name)
+            .OrderByDescending(dir => dir.Name, NumericOrderingStringComparer.Instance)
             .ToArray();
 
         if (dirs.Length == 0)

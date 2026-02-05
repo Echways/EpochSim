@@ -15,6 +15,10 @@ public sealed class SimulationEngine<TState>
     private readonly List<IExecutionMiddleware> _middleware = new();
     private readonly CommandRouter<TState> _commandRouter = new();
 
+    internal IReadOnlyList<ISystem<TState>> Systems => _systems;
+    internal IReadOnlyList<IExecutionMiddleware> Middleware => _middleware;
+    internal CommandRouter<TState> CommandRouter => _commandRouter;
+
     public void AddSystem(ISystem<TState> system) => _systems.Add(system);
     public void AddMiddleware(IExecutionMiddleware middleware) => _middleware.Add(middleware);
 
@@ -31,63 +35,29 @@ public sealed class SimulationEngine<TState>
         RunContext? context = null,
         CancellationToken cancellationToken = default)
     {
+        using var session = CreateSession(state, seed, start, endInclusive, options, context);
+        session.RunUntil(endInclusive, cancellationToken);
+    }
+
+    public SimulationSession<TState> CreateSession(
+        TState state,
+        ulong seed,
+        SimTime start,
+        RunOptions? options = null,
+        RunContext? context = null)
+        => CreateSession(state, seed, start, plannedEndInclusive: null, options, context);
+
+    internal SimulationSession<TState> CreateSession(
+        TState state,
+        ulong seed,
+        SimTime start,
+        SimTime? plannedEndInclusive,
+        RunOptions? options = null,
+        RunContext? context = null)
+    {
         options ??= new RunOptions();
         options.Validate();
-
-        var rng = new DeterministicRng(seed, options.RngVersion);
-        var time = start;
-        var scheduler = new Scheduler(() => time);
-        var runInfo = new RunInfo(
-            Mode: RunMode.Run,
-            Seed: seed,
-            StartTick: start,
-            EndTickInclusive: endInclusive,
-            RunId: context?.RunId,
-            ArtifactDir: context?.ArtifactDir,
-            Options: options,
-            StrictReplay: false,
-            RngVersion: options.RngVersion.ToString());
-
-        try
-        {
-            NotifyRunStart(runInfo);
-
-            while (time.Tick <= endInclusive.Tick)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                NotifyTickStart(time);
-
-                var commands = new CommandBuffer();
-                var events = new EventBuffer();
-
-                DrainScheduledAt(time, scheduler, events);
-
-                var tickCtx = new TickContext<TState>(time, state, scheduler, commands, rng, cancellationToken);
-
-                foreach (var sys in _systems)
-                {
-                    NotifySystemTickStart(time, sys.Name);
-                    sys.Tick(tickCtx);
-                    NotifySystemTickEnd(time, sys.Name);
-                }
-
-                RunPump(time, state, scheduler, commands, events, rng, options, cancellationToken);
-
-                NotifyTickEnd(time);
-
-                time = time.AddTicks(1);
-            }
-        }
-        catch (Exception ex)
-        {
-            NotifyRunFailed(runInfo, ex);
-            throw;
-        }
-        finally
-        {
-            NotifyRunEnd(runInfo);
-        }
+        return new SimulationSession<TState>(this, state, seed, start, plannedEndInclusive, options, context);
     }
 
     public void ReplayFromLog(
@@ -267,7 +237,7 @@ public sealed class SimulationEngine<TState>
         }
     }
 
-    private void DrainScheduledAt(
+    internal void DrainScheduledAt(
         in SimTime time,
         Scheduler scheduler,
         IEventBuffer events)
@@ -309,7 +279,7 @@ public sealed class SimulationEngine<TState>
         }
     }
 
-    private void RunPump(
+    internal void RunPump(
         SimTime time,
         TState state,
         IScheduler scheduler,
@@ -371,67 +341,67 @@ public sealed class SimulationEngine<TState>
         }
     }
 
-    private void NotifyRunStart(RunInfo info)
+    internal void NotifyRunStart(RunInfo info)
     {
         foreach (var middleware in _middleware)
             middleware.OnRunStart(info);
     }
 
-    private void NotifyRunEnd(RunInfo info)
+    internal void NotifyRunEnd(RunInfo info)
     {
         foreach (var middleware in _middleware)
             middleware.OnRunEnd(info);
     }
 
-    private void NotifyRunFailed(RunInfo info, Exception exception)
+    internal void NotifyRunFailed(RunInfo info, Exception exception)
     {
         foreach (var middleware in _middleware)
             middleware.OnRunFailed(info, exception);
     }
 
-    private void NotifyTickStart(SimTime time)
+    internal void NotifyTickStart(SimTime time)
     {
         foreach (var middleware in _middleware)
             middleware.OnTickStart(time);
     }
 
-    private void NotifyTickEnd(SimTime time)
+    internal void NotifyTickEnd(SimTime time)
     {
         foreach (var middleware in _middleware)
             middleware.OnTickEnd(time);
     }
 
-    private void NotifySystemTickStart(SimTime time, string systemName)
+    internal void NotifySystemTickStart(SimTime time, string systemName)
     {
         foreach (var middleware in _middleware)
             middleware.OnSystemTickStart(time, systemName);
     }
 
-    private void NotifySystemTickEnd(SimTime time, string systemName)
+    internal void NotifySystemTickEnd(SimTime time, string systemName)
     {
         foreach (var middleware in _middleware)
             middleware.OnSystemTickEnd(time, systemName);
     }
 
-    private void NotifyCommandHandlerStart(SimTime time, string handlerName, ICommand command)
+    internal void NotifyCommandHandlerStart(SimTime time, string handlerName, ICommand command)
     {
         foreach (var middleware in _middleware)
             middleware.OnCommandHandlerStart(time, handlerName, command);
     }
 
-    private void NotifyCommandHandlerEnd(SimTime time, string handlerName, ICommand command)
+    internal void NotifyCommandHandlerEnd(SimTime time, string handlerName, ICommand command)
     {
         foreach (var middleware in _middleware)
             middleware.OnCommandHandlerEnd(time, handlerName, command);
     }
 
-    private void NotifyEventDispatched(SimTime time, IEvent ev)
+    internal void NotifyEventDispatched(SimTime time, IEvent ev)
     {
         foreach (var middleware in _middleware)
             middleware.OnEventDispatched(time, ev);
     }
 
-    private void DispatchToSystems(EventContext<TState> ctx, IEvent ev)
+    internal void DispatchToSystems(EventContext<TState> ctx, IEvent ev)
     {
         foreach (var sys in _systems)
             sys.Handle(ctx, ev);

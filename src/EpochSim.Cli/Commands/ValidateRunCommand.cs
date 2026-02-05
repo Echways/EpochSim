@@ -6,12 +6,10 @@ using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
-using EpochSim.Execution.RunArtifacts;
-using EpochSim.Execution.StateFingerprint;
+using EpochSim.Hosting;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
-using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Cli.Commands;
 
@@ -77,10 +75,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
         var codec = adapter.Codec;
         var stateSerializer = adapter.Serializer;
 
-        var runId = string.IsNullOrWhiteSpace(runArg) ? RunId.New() : CliParsing.NormalizeRunId(runArg);
-        var paths = new RunPaths(ctx.Root, runId);
-        paths.Ensure();
-        RunMetaWriter.Write(paths, mode: "validate-run", seed: seed, endTick: endTick, snapEvery: snapEvery, fingerprintEvery: fingerprintEvery);
+        var runId = string.IsNullOrWhiteSpace(runArg) ? EpochSim.Execution.RunArtifacts.RunId.New() : CliParsing.NormalizeRunId(runArg);
 
         var engine = new SimulationEngine<TState>();
         adapter.ConfigureEngine(engine);
@@ -90,36 +85,34 @@ public sealed class ValidateRunCommand : DomainCommandBase
         var memLog = new InMemoryEventLogMiddleware(codec);
         engine.AddMiddleware(memLog);
 
-        var eventsPath = compress ? paths.EventsPathGz : paths.EventsPath;
-        using var eventWriter = new EventLogWriter(eventsPath);
-        engine.AddMiddleware(new EventLogMiddleware(eventWriter, codec));
-
-        using var fpWriter = new JsonlStateFingerprintWriter(paths.StateFpPath);
-        engine.AddMiddleware(new StateFingerprintMiddleware<TState>(world, stateSerializer, fpWriter, fingerprintEvery));
-
-        if (guardState)
-            engine.AddMiddleware(new StateMutationGuardMiddleware<TState>(world, stateSerializer));
-
-        engine.AddMiddleware(new FailureArtifactsMiddleware<TState>(
-            world,
-            stateSerializer,
-            codec,
-            snapshotEnabled: snapEvery > 0));
-
-        engine.AddMiddleware(new SnapshotMiddleware<TState>(world, snapEvery, paths.SnapshotsDir, stateSerializer));
-
         var invariants = new List<IInvariant<TState>>();
         invariants.AddRange(adapter.CreateInvariants());
         invariants.Add(new MaxEventsPerTickInvariant<TState>(() => memLog.EventsThisTick, maxEvents: 1000));
 
-        engine.AddMiddleware(new InvariantMiddleware<TState>(world, invariants, checkEveryTicks: 1));
+        var runBuilder = EpochSimRun.For(world)
+            .WithRootDirectory(ctx.Root)
+            .WithRunId(runId)
+            .WithCompression(compress)
+            .WithEventLog(codec)
+            .WithStateFingerprints(stateSerializer, fingerprintEvery)
+            .WithFailureArtifacts(stateSerializer, codec, tailSize: 200)
+            .WithInvariants(invariants, checkEveryTicks: 1);
+
+        if (snapEvery > 0)
+            runBuilder.WithSnapshots(stateSerializer, snapEvery);
+
+        if (guardState)
+            runBuilder.WithStateMutationGuard(stateSerializer);
+
+        using var run = runBuilder.Build();
+        run.AttachTo(engine);
 
         var dumper = new FailFastDumpMiddleware<TState>(
             state: world,
             currentTickProvider: () => memLog.CurrentTick,
             eventLogProvider: () => memLog.Entries,
             serializer: stateSerializer,
-            dumpDirectory: paths.DumpsDir);
+            dumpDirectory: run.Paths.DumpsDir);
 
         var defaults = new RunOptions();
         var options = new RunOptions
@@ -129,40 +122,22 @@ public sealed class ValidateRunCommand : DomainCommandBase
             RngVersion = rngVersionOpt ?? defaults.RngVersion
         };
 
-        var manifest = new RunManifest(
-            EngineVersion: RunManifestWriter.GetEngineVersion(),
-            RunMode: RunMode.Run.ToString(),
-            Seed: seed,
-            StartTick: 0,
-            EndTick: endTick,
-            EventLogVersion: 2,
-            RngVersion: options.RngVersion.ToString(),
-            SnapshotEvery: snapEvery,
-            FingerprintEvery: fingerprintEvery,
-            MaxPumpStepsPerTick: options.MaxPumpStepsPerTick,
-            MaxEventsPerTick: options.MaxEventsPerTick,
-            StrictReplay: false,
-            BuildTimestampUtc: DateTime.UtcNow);
-
-        RunManifestWriter.Write(paths.ManifestPath, manifest);
-
         try
         {
             using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ctx.Cancellation);
             if (cancelAfterMsOpt.HasValue && cancelAfterMsOpt.Value > 0)
                 cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
-            var runContext = new RunContext(paths.RunId, paths.RunDir);
             engine.RunTicks(
                 world,
                 seed: seed,
                 start: SimTime.Zero,
                 endInclusive: new SimTime(endTick),
                 options: options,
-                context: runContext,
+                context: run.Context,
                 cancellationToken: cancellation.Token);
-            Console.WriteLine($"RunDir={paths.RunDir}");
-            Console.WriteLine($"RunId={paths.RunId}");
+            Console.WriteLine($"RunDir={run.Paths.RunDir}");
+            Console.WriteLine($"RunId={run.RunId}");
             Console.WriteLine("ValidationOK");
             foreach (var line in adapter.DescribeState(world))
                 Console.WriteLine(line);
@@ -171,8 +146,8 @@ public sealed class ValidateRunCommand : DomainCommandBase
         catch (InvariantViolationException ex)
         {
             dumper.DumpOnViolation(ex);
-            Console.WriteLine($"RunDir={paths.RunDir}");
-            Console.WriteLine($"RunId={paths.RunId}");
+            Console.WriteLine($"RunDir={run.Paths.RunDir}");
+            Console.WriteLine($"RunId={run.RunId}");
             Console.WriteLine(ex.Message);
             return 2;
         }

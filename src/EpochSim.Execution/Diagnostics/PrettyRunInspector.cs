@@ -37,8 +37,10 @@ public static class PrettyRunInspector
 
         var eventsPath = paths.ResolveEventsPath();
         var tracePath = paths.ResolveTracePath();
+        var profilePath = paths.ResolveProfilePath();
         PrintFileInfo(Path.GetFileName(eventsPath), eventsPath);
         PrintFileInfo(Path.GetFileName(tracePath), tracePath);
+        PrintFileInfo(Path.GetFileName(profilePath), profilePath);
         PrintFileInfo("statefp.jsonl", paths.StateFpPath);
         Console.WriteLine();
 
@@ -48,7 +50,9 @@ public static class PrettyRunInspector
             Console.WriteLine($"Snapshots={snapshots.Length}");
             if (snapshots.Length > 0)
             {
-                var latestSnapshot = snapshots.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                var latestSnapshot = snapshots.Select(p => new FileInfo(p))
+                    .OrderByDescending(f => f.Name, NumericOrderingStringComparer.Instance)
+                    .First();
                 Console.WriteLine($"LastSnapshot={latestSnapshot.Name}");
 
                 try
@@ -73,7 +77,9 @@ public static class PrettyRunInspector
             Console.WriteLine($"DumpMetas={dumpMetas.Length}");
             if (dumpMetas.Length > 0)
             {
-                var latestDump = dumpMetas.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                var latestDump = dumpMetas.Select(p => new FileInfo(p))
+                    .OrderByDescending(f => f.Name, NumericOrderingStringComparer.Instance)
+                    .First();
                 Console.WriteLine($"LastDumpMeta={latestDump.Name}");
             }
         }
@@ -85,7 +91,9 @@ public static class PrettyRunInspector
         var minDir = Path.Combine(paths.RunDir, "minrepro");
         if (Directory.Exists(minDir))
         {
-            var repros = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
+            var repros = Directory.GetDirectories(minDir)
+                .OrderByDescending(Path.GetFileName, NumericOrderingStringComparer.Instance)
+                .ToArray();
             Console.WriteLine($"MinRepros={repros.Length}");
             if (repros.Length > 0)
                 Console.WriteLine($"LastMinRepro={repros[0]}");

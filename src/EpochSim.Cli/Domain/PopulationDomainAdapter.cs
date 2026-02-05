@@ -13,7 +13,11 @@ public sealed class PopulationDomainAdapter : IDomainAdapter<WorldState>
 {
     public string Name => "population";
     public Type StateType => typeof(WorldState);
-    public IEventCodecV2 Codec { get; } = new PopulationEventCodec();
+    public IEventCodecV2 Codec { get; } = new JsonEventCodecBuilder()
+        .Register<PopulationDeltaEvent>()
+        .Register<FireEvent>()
+        .Register<FireScheduledEvent>()
+        .Build();
     public IStateSerializer<WorldState> Serializer { get; } = new JsonStateSerializer<WorldState>();
     public IEventPayloadFormatter PayloadFormatter { get; } =
         new CompositeEventPayloadFormatter(new PopulationEventPayloadFormatter(), new JsonEventPayloadFormatter());
