@@ -15,12 +15,8 @@ public sealed class ScheduleFireHandler : ICommandHandler<WorldState, ScheduleFi
         => events.Emit(new FireScheduledEvent(new SimTime(command.AtTick), command.Damage));
 }
 
-public sealed record PopulationDeltaEvent(int Delta) : IEvent
-{
-    public string Kind => "PopulationDelta";
-}
+[MessageKind("PopulationDelta")]
+public sealed record PopulationDeltaEvent(int Delta) : IEvent;
 
-public sealed record FireScheduledEvent(SimTime At, int Damage) : IEvent
-{
-    public string Kind => "FireScheduled";
-}
+[MessageKind("FireScheduled")]
+public sealed record FireScheduledEvent(SimTime At, int Damage) : IEvent;

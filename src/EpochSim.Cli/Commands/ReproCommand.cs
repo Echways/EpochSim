@@ -42,7 +42,7 @@ public sealed class ReproCommand : DomainCommandBase
         if (!Directory.Exists(minDir))
             throw new DirectoryNotFoundException($"minrepro dir not found: {minDir}");
 
-        var metaPath = Path.Combine(minDir, "meta.txt");
+        var metaPath = Path.Combine(minDir, RunPaths.MetaFileName);
         var meta = RunMetaReader.Read(metaPath);
 
         if (!RunMetaReader.TryGetLong(meta, "failureTick", out var failureTick))
@@ -62,7 +62,7 @@ public sealed class ReproCommand : DomainCommandBase
             seed = 12345UL;
 
         var snapshotPath = Path.Combine(minDir, "snapshot.json");
-        var eventsPath = Path.Combine(minDir, "events.jsonl");
+        var eventsPath = Path.Combine(minDir, RunPaths.EventsFileName);
 
         if (!File.Exists(snapshotPath))
             throw new FileNotFoundException($"snapshot.json not found: {snapshotPath}");

@@ -21,7 +21,7 @@ public sealed class JsonlStateFingerprintWriter : IDisposable, IStateFingerprint
         _writer.Write("{\"t\":");
         _writer.Write(tick);
         _writer.Write(",\"h\":\"");
-        _writer.Write(hash);
+        _writer.Write(hash.AsSpan());
         _writer.WriteLine("\"}");
     }
 

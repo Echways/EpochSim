@@ -1,26 +1,26 @@
 # EpochSim
 
-Deterministic tick simulation engine for .NET 10.
+Детерминированный движок тиковых симуляций для .NET 10.
 
-`EpochSim.All` is the recommended entry package for embedding. It pulls in Kernel, Execution, Hosting, Serialization, and Observability.
-Russian version: [README.ru.md](https://github.com/Echways/EpochSim/blob/main/README.ru.md)
+`EpochSim.All` — рекомендуемый пакет для встраивания. Он подтягивает Kernel, Execution, Hosting, Serialization и Observability.
+English version: [README.md](https://github.com/Echways/EpochSim/blob/main/README.md)
 
-## Install
+## Установка
 
 ```bash
 dotnet add package EpochSim.All
 ```
 
-Optional direct packages (when you need finer control):
+Опционально можно ставить пакеты по отдельности:
 - `EpochSim.Kernel`
 - `EpochSim.Execution`
 - `EpochSim.Hosting`
 - `EpochSim.Serialization`
 - `EpochSim.Observability`
 
-## Adoption Path (10-15 minutes)
+## Путь внедрения (10-15 минут)
 
-### 1) Define state, messages, system, and handler
+### 1) Определите состояние, сообщения, систему и обработчик команд
 
 ```csharp
 using EpochSim.Kernel.Messaging;
@@ -74,11 +74,11 @@ public sealed class PopulationNonNegativeInvariant : IInvariant<WorldState>
 }
 ```
 
-Notes:
-- `IEvent` and `ICommand` no longer require manual `Kind` boilerplate.
-- Default kind is type name (`PopulationChanged`), override with `[MessageKind("...")]` when the external name must stay stable.
+Примечания:
+- Для `IEvent` и `ICommand` больше не нужно вручную писать `Kind`.
+- По умолчанию `Kind` = имя типа (`PopulationChanged`), а для стабильного публичного имени используйте `[MessageKind("...")]`.
 
-### 2) Configure engine and JSON codec
+### 2) Настройте движок и JSON-кодек
 
 ```csharp
 using EpochSim.Execution;
@@ -96,7 +96,7 @@ var codec = new JsonEventCodecBuilder()
     .Build();
 ```
 
-### 3) Build one run scope with artifacts and attach it
+### 3) Соберите scope запуска с артефактами и подключите к движку
 
 ```csharp
 using EpochSim.Execution.RunArtifacts;
@@ -131,9 +131,9 @@ engine.RunTicks(
     context: run.Context);
 ```
 
-`Dispose()` on the run scope flushes sinks and finalizes `manifest.json` and `meta.txt`.
+`Dispose()` у run scope сбрасывает sink-ы и финализирует `manifest.json` и `meta.txt`.
 
-### 4) Use session API for long-lived loops (instead of `RunTicks`)
+### 4) Используйте API сессии для долгоживущих циклов (вместо `RunTicks`)
 
 ```csharp
 using var session = engine.CreateSession(
@@ -147,27 +147,27 @@ while (session.CurrentTime.Tick <= 10)
 session.RunUntil(new SimTime(1000));
 ```
 
-Session API:
+API сессии:
 - `SimTime CurrentTime { get; }`
 - `bool TickOnce(CancellationToken ct = default)`
 - `void RunUntil(SimTime endInclusive, CancellationToken ct = default)`
 
-## Artifact Conventions
+## Конвенции артефактов
 
-All paths come from `RunPaths` (`EpochSim.Execution.RunArtifacts`) and are shared between embedding and CLI.
+Все пути централизованы в `RunPaths` (`EpochSim.Execution.RunArtifacts`) и одинаковы для встраивания и CLI.
 
-`artifacts/<runId>/` contains:
-- `events.jsonl` or `events.jsonl.gz`
-- `trace.jsonl` or `trace.jsonl.gz`
-- `profile.jsonl` or `profile.jsonl.gz`
+В `artifacts/<runId>/`:
+- `events.jsonl` или `events.jsonl.gz`
+- `trace.jsonl` или `trace.jsonl.gz`
+- `profile.jsonl` или `profile.jsonl.gz`
 - `statefp.jsonl`
 - `manifest.json`
 - `meta.txt`
 - `snapshots/`
 - `dumps/`
-- `failure-report.json` and `failure-snapshot.json` when a run fails
+- `failure-report.json` и `failure-snapshot.json` при падении прогона
 
-## CLI Quick Start
+## CLI: быстрый старт
 
 ```bash
 dotnet run --project src/EpochSim.Cli -- run artifacts
@@ -175,35 +175,35 @@ dotnet run --project src/EpochSim.Cli -- list-runs artifacts
 dotnet run --project src/EpochSim.Cli -- inspect-run artifacts <runId>
 ```
 
-CLI uses the same hosting/run building blocks as embedding, so artifact layout is identical.
+CLI использует тот же builder/scope из `EpochSim.Hosting`, поэтому раскладка артефактов полностью совпадает со встраиванием.
 
-## Determinism Checklist
+## Чек-лист детерминизма
 
-Avoid non-deterministic sources in systems and handlers:
+Избегайте недетерминированных источников в системах и обработчиках:
 - `DateTime.Now` / `DateTime.UtcNow`
 - `Guid.NewGuid()`
-- ad-hoc `Random` (use `ctx.Rng`)
-- relying on unordered collection iteration
-- hidden concurrency races
+- произвольный `Random` (используйте `ctx.Rng`)
+- зависимость от порядка обхода неупорядоченных коллекций
+- скрытые гонки в многопоточности
 
-## Build and Test (.NET 10 + C# 14)
+## Сборка и тесты (.NET 10 + C# 14)
 
 ```bash
 dotnet build EpochSim.slnx -m:1
 dotnet test EpochSim.slnx -m:1
 ```
 
-## More Docs
+## Дополнительная документация
 
-English:
-- [Embedding](https://github.com/Echways/EpochSim/blob/main/docs/Embedding.md)
-- [Artifacts](https://github.com/Echways/EpochSim/blob/main/docs/Artifacts.md)
-- [Sessions](https://github.com/Echways/EpochSim/blob/main/docs/Sessions.md)
-- [Determinism](https://github.com/Echways/EpochSim/blob/main/docs/Determinism.md)
-
-Russian:
-- [README.ru.md](https://github.com/Echways/EpochSim/blob/main/README.ru.md)
+Русская:
 - [Embedding.ru](https://github.com/Echways/EpochSim/blob/main/docs/Embedding.ru.md)
 - [Artifacts.ru](https://github.com/Echways/EpochSim/blob/main/docs/Artifacts.ru.md)
 - [Sessions.ru](https://github.com/Echways/EpochSim/blob/main/docs/Sessions.ru.md)
 - [Determinism.ru](https://github.com/Echways/EpochSim/blob/main/docs/Determinism.ru.md)
+
+English:
+- [README.md](https://github.com/Echways/EpochSim/blob/main/README.md)
+- [Embedding](https://github.com/Echways/EpochSim/blob/main/docs/Embedding.md)
+- [Artifacts](https://github.com/Echways/EpochSim/blob/main/docs/Artifacts.md)
+- [Sessions](https://github.com/Echways/EpochSim/blob/main/docs/Sessions.md)
+- [Determinism](https://github.com/Echways/EpochSim/blob/main/docs/Determinism.md)

@@ -49,6 +49,12 @@ public sealed class InspectRunCommand : ICliCommand
         else
             Console.WriteLine("Events: missing");
 
+        var profilePath = paths.ResolveProfilePath();
+        if (File.Exists(profilePath))
+            Console.WriteLine($"ProfileLines={CountLines(profilePath)}");
+        else
+            Console.WriteLine("Profile: missing");
+
         if (File.Exists(paths.StateFpPath))
             Console.WriteLine($"StateFpLines={File.ReadLines(paths.StateFpPath).LongCount()}");
         else
@@ -60,7 +66,9 @@ public sealed class InspectRunCommand : ICliCommand
             Console.WriteLine($"Snapshots={snapshots.Length}");
             if (snapshots.Length > 0)
             {
-                var lastSnapshot = snapshots.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                var lastSnapshot = snapshots.Select(p => new FileInfo(p))
+                    .OrderByDescending(f => f.Name, NumericOrderingStringComparer.Instance)
+                    .First();
                 Console.WriteLine($"LastSnapshot={lastSnapshot.Name}");
             }
         }
@@ -75,7 +83,9 @@ public sealed class InspectRunCommand : ICliCommand
             Console.WriteLine($"DumpMetas={dumpMetas.Length}");
             if (dumpMetas.Length > 0)
             {
-                var lastDump = dumpMetas.Select(p => new FileInfo(p)).OrderByDescending(f => f.Name).First();
+                var lastDump = dumpMetas.Select(p => new FileInfo(p))
+                    .OrderByDescending(f => f.Name, NumericOrderingStringComparer.Instance)
+                    .First();
                 Console.WriteLine($"LastDumpMeta={lastDump.Name}");
             }
         }
@@ -87,7 +97,9 @@ public sealed class InspectRunCommand : ICliCommand
         var minDir = Path.Combine(paths.RunDir, "minrepro");
         if (Directory.Exists(minDir))
         {
-            var repros = Directory.GetDirectories(minDir).OrderByDescending(x => x).ToArray();
+            var repros = Directory.GetDirectories(minDir)
+                .OrderByDescending(Path.GetFileName, NumericOrderingStringComparer.Instance)
+                .ToArray();
             Console.WriteLine($"MinRepros={repros.Length}");
             if (repros.Length > 0)
                 Console.WriteLine($"LastMinRepro={repros[0]}");

@@ -2,6 +2,7 @@ using System.Text.Json;
 using EpochSim.Kernel.Messaging;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
+using EpochSim.Execution.RunArtifacts;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.Snapshots;
 using EpochSim.Serialization.State;
@@ -54,7 +55,7 @@ public sealed class FailureArtifactsMiddleware<TState>(
 
         var failureTick = ResolveFailureTick(exception);
         var snapshotPath = snapshotEnabled && failureTick.HasValue
-            ? Path.Combine(info.ArtifactDir, "failure-snapshot.json")
+            ? Path.Combine(info.ArtifactDir, RunPaths.FailureSnapshotFileName)
             : null;
 
         if (snapshotPath is not null && failureTick is long tick)
@@ -74,7 +75,7 @@ public sealed class FailureArtifactsMiddleware<TState>(
             LastEvents: _tail.ToArray(),
             SnapshotPath: snapshotPath);
 
-        var reportPath = Path.Combine(info.ArtifactDir, "failure-report.json");
+        var reportPath = Path.Combine(info.ArtifactDir, RunPaths.FailureReportFileName);
         var json = JsonSerializer.Serialize(report, JsonOptions);
         File.WriteAllText(reportPath, json);
     }

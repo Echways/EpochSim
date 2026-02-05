@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\EpochSim.Execution\EpochSim.Execution.csproj" />
+    <ProjectReference Include="..\..\src\EpochSim.Hosting\EpochSim.Hosting.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Kernel\EpochSim.Kernel.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Cli\EpochSim.Cli.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Samples\EpochSim.Samples.csproj" />

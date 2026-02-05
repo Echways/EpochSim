@@ -36,10 +36,10 @@ public static class MinReproWriter
             snapTick = snap.Tick;
         }
 
-        var eventsOutPath = Path.Combine(dir, "events.jsonl");
+        var eventsOutPath = Path.Combine(dir, RunPaths.EventsFileName);
         WriteEventsTail(paths.ResolveEventsPath(), eventsOutPath, snapTick, failureTick);
 
-        var metaOutPath = Path.Combine(dir, "meta.txt");
+        var metaOutPath = Path.Combine(dir, RunPaths.MetaFileName);
         File.WriteAllText(metaOutPath,
             $"runId={paths.RunId}\n" +
             $"failureTick={failureTick}\n" +

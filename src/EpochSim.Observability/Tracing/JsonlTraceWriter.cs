@@ -1,5 +1,5 @@
-using System.Text;
 using System.IO.Compression;
+using System.Text;
 
 namespace EpochSim.Observability.Tracing;
 
@@ -19,19 +19,29 @@ public sealed class JsonlTraceWriter : IDisposable
 
     public void Write(in TraceRecord r)
     {
-        var detail = r.Detail is null ? "null" : JsonEscape(r.Detail);
+        var detail = r.Detail;
         var dur = r.DurationTicks is null ? "null" : r.DurationTicks.Value.ToString();
 
         _writer.Write("{\"t\":");
         _writer.Write(r.Time.Tick);
-        _writer.Write(",\"type\":");
-        _writer.Write(JsonEscape(r.Type));
-        _writer.Write(",\"name\":");
-        _writer.Write(JsonEscape(r.Name));
+        _writer.Write(",\"type\":\"");
+        WriteEscaped(r.Type);
+        _writer.Write("\",\"name\":\"");
+        WriteEscaped(r.Name);
+        _writer.Write('"');
         _writer.Write(",\"dur\":");
         _writer.Write(dur);
         _writer.Write(",\"detail\":");
-        _writer.Write(detail);
+        if (detail is null)
+        {
+            _writer.Write("null");
+        }
+        else
+        {
+            _writer.Write('"');
+            WriteEscaped(detail);
+            _writer.Write('"');
+        }
         _writer.WriteLine("}");
     }
 
@@ -43,23 +53,31 @@ public sealed class JsonlTraceWriter : IDisposable
         _writer.Dispose();
     }
 
-    private static string JsonEscape(string s)
+    private void WriteEscaped(ReadOnlySpan<char> s)
     {
-        var builder = new StringBuilder(s.Length + 8);
-        builder.Append('"');
         foreach (var ch in s)
         {
-            builder.Append(ch switch
+            switch (ch)
             {
-                '"' => "\\\"",
-                '\\' => "\\\\",
-                '\n' => "\\n",
-                '\r' => "\\r",
-                '\t' => "\\t",
-                _ => ch
-            });
+                case '"':
+                    _writer.Write("\\\"");
+                    break;
+                case '\\':
+                    _writer.Write("\\\\");
+                    break;
+                case '\n':
+                    _writer.Write("\\n");
+                    break;
+                case '\r':
+                    _writer.Write("\\r");
+                    break;
+                case '\t':
+                    _writer.Write("\\t");
+                    break;
+                default:
+                    _writer.Write(ch);
+                    break;
+            }
         }
-        builder.Append('"');
-        return builder.ToString();
     }
 }

@@ -20,10 +20,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="EpochSim.Kernel" Version="$(Version)" />
-    <PackageReference Include="EpochSim.Execution" Version="$(Version)" />
-    <PackageReference Include="EpochSim.Serialization" Version="$(Version)" />
-    <PackageReference Include="EpochSim.Observability" Version="$(Version)" />
+    <ProjectReference Include="..\EpochSim.Kernel\EpochSim.Kernel.csproj" />
+    <ProjectReference Include="..\EpochSim.Execution\EpochSim.Execution.csproj" />
+    <ProjectReference Include="..\EpochSim.Hosting\EpochSim.Hosting.csproj" />
+    <ProjectReference Include="..\EpochSim.Serialization\EpochSim.Serialization.csproj" />
+    <ProjectReference Include="..\EpochSim.Observability\EpochSim.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>

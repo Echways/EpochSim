@@ -1,3 +1,6 @@
 namespace EpochSim.Kernel.Messaging;
 
-public interface IEvent { string Kind { get; } }
+public interface IEvent
+{
+    string Kind => MessageKinds.GetKind(GetType());
+}
