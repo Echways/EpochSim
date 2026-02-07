@@ -11,29 +11,42 @@ public static class EpochSimRun
 
     public static EpochSimRunScope<TState> Quick<TState>(
         TState state,
-        IEventCodecV2? codec = null,
-        IStateSerializer<TState>? serializer = null,
-        string? rootDir = null)
+        string? rootDir = null,
+        IEventCodecV2? codec = null)
     {
+        var serializer = new JsonStateSerializer<TState>();
         var builder = For(state);
 
         if (!string.IsNullOrWhiteSpace(rootDir))
             builder.WithRootDirectory(rootDir);
 
-        builder.WithCompression(true).WithTraceJsonl();
+        builder
+            .WithCompression(true)
+            .WithSnapshots(serializer, everyTicks: 50)
+            .WithStateFingerprints(serializer, everyTicks: 1)
+            .WithTraceJsonl();
 
         if (codec is not null)
-            builder.WithEventLog(codec);
-
-        if (serializer is not null)
         {
-            builder.WithStateFingerprints(serializer, everyTicks: 1);
-
-            if (codec is not null)
-                builder.WithFailureArtifacts(serializer, codec, tailSize: 200);
+            builder.WithEventLog(codec);
+            builder.WithFailureArtifacts(serializer, codec, tailSize: 200);
         }
 
         return builder.Build();
+    }
+
+    public static EpochSimRunScope<TState> Recommended<TState>(
+        TState state,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        var serializer = new JsonStateSerializer<TState>();
+        var builder = For(state);
+
+        if (!string.IsNullOrWhiteSpace(rootDir))
+            builder.WithRootDirectory(rootDir);
+
+        return builder.BuildRecommended(serializer, invariants);
     }
 
     public static EpochSimRunScope<TState> Recommended<TState>(

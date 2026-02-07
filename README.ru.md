@@ -2,128 +2,133 @@
 
 Детерминированный движок тиковых симуляций для .NET 10.
 
-`EpochSim` — основной фасадный пакет: минимум ручной обвязки и быстрый старт для встраивания.
-
-English version: [README.md](README.md)
-
-## Установка
+Рекомендуемый пакет для встраивания:
 
 ```bash
 dotnet add package EpochSim
 ```
 
-Если нужен полный граф модулей одной зависимостью:
+`EpochSim.All` полезен, когда нужен полный граф модулей одной зависимостью:
 
 ```bash
 dotnet add package EpochSim.All
 ```
 
-## Быстрый старт за 60 секунд
+English version: [README.md](README.md)
+
+## Быстрый старт только со State (без Event/Codec)
 
 ```csharp
 using EpochSim;
-using EpochSim.Kernel.Messaging;
 
 var state = new WorldState();
 var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
-engine.AddSystem(
-    "World",
-    tick: ctx => ctx.Commands.Enqueue(new Grow(1)),
-    handle: (ctx, ev) =>
-    {
-        if (ev is Grew e)
-            ctx.State.Population += e.Delta;
-    });
-
-engine.OnCommand<Grow>((_, cmd, events) => events.Emit(new Grew(cmd.Delta)));
-
-var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Grew));
-var serializer = Epoch.JsonStateSerializer<WorldState>();
-
-using var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts");
+using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 engine.Attach(run);
-engine.RunTicks(state, seed: 12345, endTickInclusive: 100);
+engine.RunTicks(state, seed: 1, endTickInclusive: 100);
 
-Console.WriteLine($"RunId={run.RunId}");
-Console.WriteLine($"RunDir={run.Paths.RunDir}");
+Console.WriteLine(state.Population);
 
 public sealed class WorldState
 {
     public int Population { get; set; }
 }
-
-[MessageKind("Grow")]
-public sealed record Grow(int Delta) : ICommand;
-public sealed record Grew(int Delta) : IEvent;
 ```
 
-Результат: детерминированный прогон в `artifacts/<runId>/` со стандартными артефактами.
+Это самый быстрый путь: полезные артефакты и детерминированный запуск почти без обвязки.
 
-## Что упрощено
+## Рекомендуемые пресеты артефактов
 
-- Меньше boilerplate в домене:
-  - для `IEvent` и `ICommand` не нужно вручную писать `Kind`;
-  - у `ISystem<TState>` есть дефолтные `Name` и no-op `Handle`.
-- Lambda-регистрация:
-  - `engine.AddSystem(name, tick, handle?)`
-  - `engine.OnCommand<TCommand>((state, cmd, events) => ...)`
-- Простые перегрузки запуска:
-  - `RunTicks(state, seed, endTickInclusive)`
-  - `RunTicks(state, seed, startTick, endTickInclusive)`
-- Пресеты артефактов:
-  - `EpochSimRun.Quick(...)`
-  - `EpochSimRun.Recommended(...)`
-
-## Пресеты запуска
-
-- Quick:
-  - `EpochSimRun.Quick(state, codec?, serializer?, rootDir?)`
-  - Для быстрого smoke-прогона.
-- Recommended:
-  - `EpochSimRun.Recommended(state, codec, serializer, rootDir?, invariants?)`
-  - Включает compression, event log, snapshots, fingerprints, trace, profiling, mutation guard, failure artifacts.
-
-## API долгоживущей сессии
+`QuickRun`:
+- лучший для первого запуска и базовой отладки;
+- включает metadata + snapshots + state fingerprints + trace;
+- не требует event codec.
 
 ```csharp
-using EpochSim.Kernel.Time;
-
-using var session = engine.CreateSession(state, seed: 12345, start: SimTime.Zero);
-
-while (session.CurrentTime.Tick <= 10)
-    session.TickOnce();
-
-session.RunUntil(new SimTime(500));
+using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 ```
 
-Поверхность API:
-- `SimTime CurrentTime { get; }`
-- `bool TickOnce(CancellationToken ct = default)`
-- `void RunUntil(SimTime endInclusive, CancellationToken ct = default)`
+`RecommendedRun`:
+- базовый вариант для реальной отладки в приложениях и сервисах;
+- включает fingerprints + snapshots + trace + profiling + failure artifacts;
+- не требует codec в базовом сценарии;
+- можно добавить инварианты.
 
-## Полный builder (явная настройка)
+```csharp
+using var run = Epoch.RecommendedRun(state, rootDir: "artifacts", invariants: null);
+```
+
+Продвинутые варианты:
+- `Epoch.RecommendedRun(state, codec, serializer, rootDir, invariants)`
+- `EpochSimRun.For(state)...Build()`
+
+## Event log / Replay (когда действительно нужно)
+
+Event log нужен для replay/bisect (`verify-run`, `bisect`, `fast-replay`):
 
 ```csharp
 using EpochSim;
-using EpochSim.Execution.RunArtifacts;
-using EpochSim.Kernel.Validation;
+using EpochSim.Kernel.Messaging;
 
+var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Changed));
 var serializer = Epoch.JsonStateSerializer<WorldState>();
-var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Grew));
-IInvariant<WorldState>[] invariants = [];
 
-using var run = EpochSimRun.For(state)
-    .WithRootDirectory("artifacts")
-    .WithRunId(RunId.New())
-    .WithRecommendedDefaults(codec, serializer, invariants)
-    .Build();
-
-engine.Attach(run);
-engine.RunTicks(state, seed: 12345, endTickInclusive: 100);
+using var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts");
 ```
 
-## CLI быстрый старт
+```csharp
+[MessageKind("Changed")]
+public sealed record Changed(int Delta) : IEvent;
+```
+
+## RunTicks и Session
+
+`RunTicks` для batch-прогонов:
+
+```csharp
+engine.RunTicks(state, seed: 1, endTickInclusive: 1000);
+```
+
+`SimulationSession<TState>` для долгоживущих циклов:
+
+```csharp
+var inbox = new CommandInbox();
+engine.AttachInbox(inbox);
+
+using var session = engine.CreateSession(state, seed: 1, startTick: 0);
+inbox.Enqueue(new AddPopulation(5));
+session.TickOnce();
+session.RunUntil(100);
+```
+
+```csharp
+using EpochSim.Kernel.Messaging;
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+```
+
+## Паттерн внешних входов (HTTP/UI/Queue -> sim)
+
+Используйте inbox’ы для детерминированного ввода команд в тике симуляции:
+- `CommandInbox`: команды на ближайший тик.
+- `ScheduledCommandInbox`: команды на заданный тик со стабильным порядком:
+  - сначала `tick` по возрастанию;
+  - затем порядок добавления.
+
+```csharp
+var scheduled = new ScheduledCommandInbox();
+engine.AttachScheduledInbox(scheduled);
+
+scheduled.Enqueue(10, new AddPopulation(3));
+scheduled.Enqueue(10, new AddPopulation(7));
+scheduled.Enqueue(12, new AddPopulation(1));
+```
+
+Полные рецепты: [Embedding](docs/Embedding.ru.md)
+
+## CLI старт
 
 ```bash
 dotnet run --project src/EpochSim.Cli -- init .
@@ -131,14 +136,17 @@ dotnet run --project src/EpochSim.Cli -- run artifacts
 dotnet run --project src/EpochSim.Cli -- list-runs artifacts
 ```
 
-## Чек-лист детерминизма
+Отладка детерминизма:
 
-Избегайте в системах и обработчиках:
-- `DateTime.Now` / `DateTime.UtcNow`
-- `Guid.NewGuid()`
-- произвольного `Random` (используйте `ctx.Rng`)
-- зависимости от порядка неупорядоченных коллекций
-- скрытых гонок многопоточности
+```bash
+dotnet run --project src/EpochSim.Cli -- verify-run artifacts <runId>
+dotnet run --project src/EpochSim.Cli -- bisect artifacts <runId>
+```
+
+## Примеры
+
+- Простой пример уровня README: `src/EpochSim.Samples/Quickstart/QuickstartSample.cs`
+- Продвинутый/legacy пример домена: `src/EpochSim.Samples/Population/`
 
 ## Сборка и тесты
 

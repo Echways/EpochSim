@@ -31,6 +31,17 @@ public static class Epoch
         return builder.Build();
     }
 
+    public static EpochSimRunScope<TState> QuickRun<TState>(
+        TState state,
+        string? rootDir = null)
+        => EpochSimRun.Quick(state, rootDir: rootDir);
+
+    public static EpochSimRunScope<TState> RecommendedRun<TState>(
+        TState state,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => EpochSimRun.Recommended(state, rootDir, invariants);
+
     public static EpochSimRunScope<TState> RecommendedRun<TState>(
         TState state,
         IEventCodecV2 codec,

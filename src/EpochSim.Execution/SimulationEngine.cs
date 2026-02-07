@@ -89,6 +89,14 @@ public sealed class SimulationEngine<TState>
     public SimulationSession<TState> CreateSession(
         TState state,
         ulong seed,
+        long startTick = 0,
+        RunOptions? options = null,
+        RunContext? context = null)
+        => CreateSession(state, seed, new SimTime(startTick), options, context);
+
+    public SimulationSession<TState> CreateSession(
+        TState state,
+        ulong seed,
         SimTime start,
         RunOptions? options = null,
         RunContext? context = null)

@@ -108,6 +108,9 @@ public sealed class SimulationSession<TState> : IDisposable
             TickOnce(cancellationToken);
     }
 
+    public void RunUntil(long endTickInclusive, CancellationToken cancellationToken = default)
+        => RunUntil(new SimTime(endTickInclusive), cancellationToken);
+
     public void Dispose()
     {
         if (_disposed)

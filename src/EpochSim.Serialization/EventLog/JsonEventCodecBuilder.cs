@@ -29,24 +29,36 @@ public sealed class JsonEventCodecBuilder
 
         if (!eventType.IsClass || eventType.IsAbstract || eventType.IsGenericTypeDefinition)
             throw new ArgumentException(
-                $"Event type '{eventType.FullName}' must be a non-abstract concrete class.",
+                $"Event type '{eventType.FullName}' cannot be registered. " +
+                "Why: codecs require a concrete event class. " +
+                "Fix: register a non-abstract class/record implementing IEvent, for example Register<MyEvent>().",
                 nameof(eventType));
 
         if (!typeof(IEvent).IsAssignableFrom(eventType))
             throw new ArgumentException(
-                $"Type '{eventType.FullName}' must implement {nameof(IEvent)}.",
+                $"Type '{eventType.FullName}' cannot be registered. " +
+                $"Why: it does not implement {nameof(IEvent)}. " +
+                "Fix: make the type implement IEvent or register the correct event type.",
                 nameof(eventType));
 
         if (_byType.ContainsKey(eventType))
-            throw new InvalidOperationException($"Event type '{eventType.FullName}' is already registered.");
+            throw new InvalidOperationException(
+                $"Event type '{eventType.FullName}' is already registered. " +
+                "Why: duplicate type registration creates ambiguous mappings. " +
+                "Fix: remove the duplicate Register<TEvent>() call.");
 
         var resolvedKind = kind ?? MessageKinds.GetKind(eventType);
         if (string.IsNullOrWhiteSpace(resolvedKind))
-            throw new InvalidOperationException($"Event kind for '{eventType.FullName}' cannot be empty.");
+            throw new InvalidOperationException(
+                $"Event kind for '{eventType.FullName}' is empty. " +
+                "Why: event kind is required for log/replay compatibility. " +
+                "Fix: set [MessageKind(\"...\")] or pass an explicit kind to Register<TEvent>(\"...\").");
 
         if (_byKind.TryGetValue(resolvedKind, out var existing))
             throw new InvalidOperationException(
-                $"Event kind '{resolvedKind}' is already registered by '{existing.EventType.FullName}'.");
+                $"Event kind '{resolvedKind}' is already registered by '{existing.EventType.FullName}'. " +
+                "Why: kind collisions make decode ambiguous. " +
+                "Fix: assign a unique [MessageKind] or explicit Register<TEvent>(kind).");
 
         var registration = new Registration(resolvedKind, eventType);
         _byType[eventType] = registration;
@@ -128,7 +140,10 @@ public sealed class JsonEventCodecBuilder
             if (!byKind.TryGetValue(kind, out var registration))
             {
                 if (strictUnknownKinds)
-                    throw new InvalidOperationException($"Unknown event kind '{kind}'.");
+                    throw new InvalidOperationException(
+                        $"Unknown event kind '{kind}'. " +
+                        "Why: strict decode mode requires explicit kind mappings for deterministic replay. " +
+                        "Fix: register the event kind in JsonEventCodecBuilder or disable strict mode.");
 
                 ev = default!;
                 return false;
@@ -144,7 +159,10 @@ public sealed class JsonEventCodecBuilder
                 }
 
                 if (strictUnknownKinds)
-                    throw new InvalidOperationException($"Decoded payload for kind '{kind}' was null.");
+                    throw new InvalidOperationException(
+                        $"Decoded payload for kind '{kind}' was null. " +
+                        "Why: payload JSON does not match the registered event type. " +
+                        "Fix: check event schema compatibility and codec registrations.");
 
                 ev = default!;
                 return false;
@@ -152,7 +170,10 @@ public sealed class JsonEventCodecBuilder
             catch (Exception ex) when (ex is JsonException || ex is NotSupportedException)
             {
                 if (strictUnknownKinds)
-                    throw new InvalidOperationException($"Failed to decode payload for kind '{kind}'.", ex);
+                    throw new InvalidOperationException(
+                        $"Failed to decode payload for kind '{kind}'. " +
+                        "Why: JSON payload is incompatible with the registered event type. " +
+                        "Fix: align event schema and kind mapping, then replay again.", ex);
 
                 ev = default!;
                 return false;
