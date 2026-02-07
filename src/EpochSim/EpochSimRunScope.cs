@@ -3,7 +3,7 @@ using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Kernel.Time;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
 public sealed partial class EpochSimRunScope<TState> : IDisposable
 {
@@ -22,7 +22,7 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
     private bool _attached;
     private bool _disposed;
 
-    internal partial EpochSimRunScope(EpochSimRunScopeInit<TState> init);
+    internal partial EpochSimRunScope(RunScopeInit<TState> init);
     public partial event Action<string>? Diagnostics;
 
     public string RunId => _paths.RunId;

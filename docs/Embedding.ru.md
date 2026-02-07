@@ -1,13 +1,17 @@
 # Встраивание EpochSim
 
-Основной пакет для подключения: `EpochSim.All` (метапакет).
-API билдера запуска находится в namespace `EpochSim.Hosting`.
+Основной пакет для подключения: `EpochSim` (фасадный).
+API билдера запуска находится в namespace `EpochSim`.
 
 Установка:
 
 ```bash
-dotnet add package EpochSim.All
+dotnet add package EpochSim
 ```
+
+Варианты пакетов:
+- `EpochSim`: фасадный API (рекомендуется для большинства приложений).
+- `EpochSim.All`: batteries-included метапакет, если нужен полный граф модулей одной зависимостью.
 
 ## Базовый процесс
 
@@ -42,6 +46,6 @@ engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTi
 
 ## Связанные разделы
 
-- Имена/форматы артефактов: `docs/Artifacts.ru.md`
-- Долгоживущие сессии: `docs/Sessions.ru.md`
-- Правила детерминизма и типовые ошибки: `docs/Determinism.ru.md`
+- [Artifacts.ru](Artifacts.ru.md): имена и форматы артефактов
+- [Sessions.ru](Sessions.ru.md): долгоживущие сессии
+- [Determinism.ru](Determinism.ru.md): правила детерминизма и типовые ошибки

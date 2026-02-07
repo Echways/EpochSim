@@ -8,10 +8,15 @@ using EpochSim.Observability.Tracing;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.State;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
 public sealed class EpochSimRunBuilder<TState>
 {
+    private const long RecommendedSnapshotEveryTicks = 50;
+    private const long RecommendedFingerprintEveryTicks = 1;
+    private const long RecommendedInvariantEveryTicks = 1;
+    private const int RecommendedFailureTailSize = 200;
+
     private readonly TState _state;
     private EpochSimRunOptions _runOptions = new();
 
@@ -117,6 +122,39 @@ public sealed class EpochSimRunBuilder<TState>
         return this;
     }
 
+    public EpochSimRunBuilder<TState> WithRecommendedDefaults(
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        WithCompression(true);
+        WithEventLog(codec);
+        WithSnapshots(serializer, everyTicks: RecommendedSnapshotEveryTicks);
+        WithStateFingerprints(serializer, everyTicks: RecommendedFingerprintEveryTicks);
+        WithTraceJsonl();
+        WithProfilingJsonl();
+        WithStateMutationGuard(serializer);
+        WithFailureArtifacts(serializer, codec, tailSize: RecommendedFailureTailSize);
+
+        if (invariants is not null)
+        {
+            var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
+            if (invariantList.Count > 0)
+                WithInvariants(invariantList, checkEveryTicks: RecommendedInvariantEveryTicks);
+        }
+
+        return this;
+    }
+
+    public EpochSimRunScope<TState> BuildRecommended(
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => WithRecommendedDefaults(codec, serializer, invariants).Build();
+
     public EpochSimRunScope<TState> Build()
     {
         var paths = new RunPaths(_runOptions.RootDirectory, _runOptions.RunId);
@@ -135,13 +173,11 @@ public sealed class EpochSimRunBuilder<TState>
             var traceSink = new InMemoryTraceSink();
             middleware.Add(new TraceMiddleware(traceSink));
 
-            var traceExporter = new DeferredTraceExport();
             var tracePath = _runOptions.Compression ? paths.TracePathGz : paths.TracePath;
             var traceWriter = new JsonlTraceWriter(tracePath);
-            traceExporter?.Writer = traceWriter;
             resources.Add(traceWriter);
 
-            traceRuntime = new TraceRuntime(traceSink, traceExporter!);
+            traceRuntime = new TraceRuntime(traceSink, traceWriter);
         }
 
         if (_profilingEnabled)
@@ -149,13 +185,11 @@ public sealed class EpochSimRunBuilder<TState>
             var profileSink = new InMemoryProfileSink();
             middleware.Add(new ProfilingMiddleware(profileSink));
 
-            var profileExporter = new DeferredProfileExport();
             var profilePath = _runOptions.Compression ? paths.ProfilePathGz : paths.ProfilePath;
             var profileWriter = new JsonlProfileWriter(profilePath);
-            profileExporter?.Writer = profileWriter;
             resources.Add(profileWriter);
 
-            profileRuntime = new ProfileRuntime(profileSink, profileExporter!);
+            profileRuntime = new ProfileRuntime(profileSink, profileWriter);
         }
 
         if (_eventCodec is not null)
@@ -196,7 +230,7 @@ public sealed class EpochSimRunBuilder<TState>
         var context = new RunContext(paths.RunId, paths.RunDir);
         var composite = new CompositeExecutionMiddleware(middleware);
 
-        var init = new EpochSimRunScopeInit<TState>(
+        var init = new RunScopeInit<TState>(
             paths,
             context,
             composite,

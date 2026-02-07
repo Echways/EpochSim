@@ -1,3 +1,3 @@
-﻿using EpochSim.Cli.App;
+using EpochSim.Cli.App;
 
 return await new CliApp().RunAsync(args);

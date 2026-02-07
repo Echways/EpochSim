@@ -1,6 +1,7 @@
 using EpochSim.Execution.RunArtifacts;
+using EpochRunId = EpochSim.Execution.RunArtifacts.RunId;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
 public sealed class EpochSimRunOptions
 {
@@ -24,7 +25,7 @@ public sealed class EpochSimRunOptions
                 throw new ArgumentException("RunId cannot be empty.", nameof(value));
             field = value;
         }
-    } = EpochSim.Execution.RunArtifacts.RunId.New();
+    } = EpochRunId.New();
 
     public bool Compression { get; init; }
 }

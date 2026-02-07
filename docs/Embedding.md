@@ -1,13 +1,17 @@
 # Embedding EpochSim
 
-Use `EpochSim.All` as the primary meta-package for embedding.
-The run builder API is in the `EpochSim.Hosting` namespace.
+Use `EpochSim` as the primary facade package for embedding.
+The run builder API is in the `EpochSim` namespace.
 
 Install:
 
 ```bash
-dotnet add package EpochSim.All
+dotnet add package EpochSim
 ```
+
+Package choices:
+- `EpochSim`: facade-first API (recommended for most app teams).
+- `EpochSim.All`: batteries-included meta-package when you want the full module graph with a single dependency.
 
 ## Core workflow
 
@@ -42,6 +46,6 @@ engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTi
 
 ## Related docs
 
-- Artifact naming and files: `docs/Artifacts.md`
-- Long-lived session API: `docs/Sessions.md`
-- Determinism rules and pitfalls: `docs/Determinism.md`
+- [Artifacts](Artifacts.md): artifact naming and files
+- [Sessions](Sessions.md): long-lived session API
+- [Determinism](Determinism.md): determinism rules and pitfalls

@@ -1,16 +1,16 @@
 using EpochSim.Execution;
-using EpochSim.Hosting;
+using EpochSim;
 using EpochSim.Kernel.Time;
 using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.State;
 
-public sealed class HostingRunScopeTests
+public sealed class RunScopeTests
 {
     [Fact]
     public void BuildRunScope_CreatesExpectedArtifacts_AndDisposesCleanly()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"epochsim-hosting-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-runscope-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
 
         try
@@ -40,7 +40,7 @@ public sealed class HostingRunScopeTests
                 .WithFailureArtifacts(serializer, codec, tailSize: 32)
                 .Build();
 
-            run.AttachTo(engine);
+            engine.Attach(run);
             engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(5), context: run.Context);
 
             var paths = run.Paths;

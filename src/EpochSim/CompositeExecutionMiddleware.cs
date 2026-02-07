@@ -3,7 +3,7 @@ using EpochSim.Execution.Middleware;
 using EpochSim.Kernel.Messaging;
 using EpochSim.Kernel.Time;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
 internal sealed class CompositeExecutionMiddleware(IReadOnlyList<IExecutionMiddleware> middleware) : IExecutionMiddleware
 {

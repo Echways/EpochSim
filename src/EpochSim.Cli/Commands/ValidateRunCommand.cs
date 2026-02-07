@@ -6,10 +6,11 @@ using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
-using EpochSim.Hosting;
+using EpochSim;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Validation;
+using EpochRunId = EpochSim.Execution.RunArtifacts.RunId;
 
 namespace EpochSim.Cli.Commands;
 
@@ -75,12 +76,12 @@ public sealed class ValidateRunCommand : DomainCommandBase
         var codec = adapter.Codec;
         var stateSerializer = adapter.Serializer;
 
-        var runId = string.IsNullOrWhiteSpace(runArg) ? EpochSim.Execution.RunArtifacts.RunId.New() : CliParsing.NormalizeRunId(runArg);
+        var runId = string.IsNullOrWhiteSpace(runArg) ? EpochRunId.New() : CliParsing.NormalizeRunId(runArg);
 
         var engine = new SimulationEngine<TState>();
         adapter.ConfigureEngine(engine);
 
-        var world = adapter.CreateInitialState();
+        var simulationState = adapter.CreateInitialState();
 
         var memLog = new InMemoryEventLogMiddleware(codec);
         engine.AddMiddleware(memLog);
@@ -89,7 +90,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
         invariants.AddRange(adapter.CreateInvariants());
         invariants.Add(new MaxEventsPerTickInvariant<TState>(() => memLog.EventsThisTick, maxEvents: 1000));
 
-        var runBuilder = EpochSimRun.For(world)
+        var runBuilder = EpochSimRun.For(simulationState)
             .WithRootDirectory(ctx.Root)
             .WithRunId(runId)
             .WithCompression(compress)
@@ -108,18 +109,18 @@ public sealed class ValidateRunCommand : DomainCommandBase
         run.AttachTo(engine);
 
         var dumper = new FailFastDumpMiddleware<TState>(
-            state: world,
+            state: simulationState,
             currentTickProvider: () => memLog.CurrentTick,
             eventLogProvider: () => memLog.Entries,
             serializer: stateSerializer,
             dumpDirectory: run.Paths.DumpsDir);
 
-        var defaults = new RunOptions();
+        var defaultOptions = new RunOptions();
         var options = new RunOptions
         {
-            MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaults.MaxPumpStepsPerTick,
-            MaxEventsPerTick = maxEventsOpt ?? defaults.MaxEventsPerTick,
-            RngVersion = rngVersionOpt ?? defaults.RngVersion
+            MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaultOptions.MaxPumpStepsPerTick,
+            MaxEventsPerTick = maxEventsOpt ?? defaultOptions.MaxEventsPerTick,
+            RngVersion = rngVersionOpt ?? defaultOptions.RngVersion
         };
 
         try
@@ -129,7 +130,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
                 cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
             engine.RunTicks(
-                world,
+                simulationState,
                 seed: seed,
                 start: SimTime.Zero,
                 endInclusive: new SimTime(endTick),
@@ -139,7 +140,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
             Console.WriteLine($"RunDir={run.Paths.RunDir}");
             Console.WriteLine($"RunId={run.RunId}");
             Console.WriteLine("ValidationOK");
-            foreach (var line in adapter.DescribeState(world))
+            foreach (var line in adapter.DescribeState(simulationState))
                 Console.WriteLine(line);
             return 0;
         }

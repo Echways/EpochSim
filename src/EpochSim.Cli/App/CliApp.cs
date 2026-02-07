@@ -16,6 +16,7 @@ public sealed class CliApp
     {
         _commands = new Dictionary<string, ICliCommand>(StringComparer.OrdinalIgnoreCase)
         {
+            ["init"] = new InitCommand(),
             ["run"] = new RunCommand(),
             ["validate-run"] = new ValidateRunCommand(),
             ["fast-replay"] = new FastReplayCommand(),
@@ -35,6 +36,12 @@ public sealed class CliApp
         var commandName = args.Length > 0 ? args[0] : "run";
         var root = args.Length > 1 ? args[1] : "artifacts";
         var commandArgs = args.Length > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
+
+        if (string.Equals(commandName, "init", StringComparison.OrdinalIgnoreCase))
+        {
+            root = Directory.GetCurrentDirectory();
+            commandArgs = args.Length > 1 ? args.Skip(1).ToArray() : Array.Empty<string>();
+        }
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -69,6 +76,7 @@ public sealed class CliApp
     private static void PrintUsage()
     {
         Console.WriteLine("Usage:");
+        Console.WriteLine("  init [targetDir]");
         Console.WriteLine("  run <artifactsRoot> [runId] [endTick] [snapEvery] [seed] [--guard-state] [--compress] [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N] [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
         Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed] [--guard-state] [--compress] [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N] [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
         Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");

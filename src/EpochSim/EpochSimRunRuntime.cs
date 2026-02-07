@@ -4,9 +4,9 @@ using EpochSim.Execution.RunArtifacts;
 using EpochSim.Observability.Profiling;
 using EpochSim.Observability.Tracing;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
-internal sealed record EpochSimRunScopeInit<TState>(
+internal sealed record RunScopeInit<TState>(
     RunPaths Paths,
     RunContext Context,
     IExecutionMiddleware Middleware,
@@ -19,42 +19,26 @@ internal sealed record EpochSimRunScopeInit<TState>(
     bool HasEventLog,
     RunMode Mode);
 
-internal sealed class DeferredTraceExport
-{
-    public JsonlTraceWriter? Writer { get; set; }
-}
-
-internal sealed class DeferredProfileExport
-{
-    public JsonlProfileWriter? Writer { get; set; }
-}
-
-internal sealed class TraceRuntime(InMemoryTraceSink sink, DeferredTraceExport export)
+internal sealed class TraceRuntime(InMemoryTraceSink sink, JsonlTraceWriter writer)
 {
     public void FlushToWriter()
     {
-        if (export.Writer is null)
-            return;
-
         var records = sink.Records;
         for (var i = 0; i < records.Count; i++)
-            export.Writer.Write(records[i]);
+            writer.Write(records[i]);
 
-        export.Writer.Flush();
+        writer.Flush();
     }
 }
 
-internal sealed class ProfileRuntime(InMemoryProfileSink sink, DeferredProfileExport export)
+internal sealed class ProfileRuntime(InMemoryProfileSink sink, JsonlProfileWriter writer)
 {
     public void FlushToWriter()
     {
-        if (export.Writer is null)
-            return;
-
         var records = sink.Records;
         for (var i = 0; i < records.Count; i++)
-            export.Writer.Write(records[i]);
+            writer.Write(records[i]);
 
-        export.Writer.Flush();
+        writer.Flush();
     }
 }

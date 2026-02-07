@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -20,8 +21,22 @@ public sealed class JsonEventCodecBuilder
 
     public JsonEventCodecBuilder Register<TEvent>(string? kind = null)
         where TEvent : class, IEvent
+        => Register(typeof(TEvent), kind);
+
+    public JsonEventCodecBuilder Register(Type eventType, string? kind = null)
     {
-        var eventType = typeof(TEvent);
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        if (!eventType.IsClass || eventType.IsAbstract || eventType.IsGenericTypeDefinition)
+            throw new ArgumentException(
+                $"Event type '{eventType.FullName}' must be a non-abstract concrete class.",
+                nameof(eventType));
+
+        if (!typeof(IEvent).IsAssignableFrom(eventType))
+            throw new ArgumentException(
+                $"Type '{eventType.FullName}' must implement {nameof(IEvent)}.",
+                nameof(eventType));
+
         if (_byType.ContainsKey(eventType))
             throw new InvalidOperationException($"Event type '{eventType.FullName}' is already registered.");
 
@@ -39,6 +54,29 @@ public sealed class JsonEventCodecBuilder
 
         return this;
     }
+
+    public JsonEventCodecBuilder RegisterFromAssembly(Assembly assembly, Func<Type, bool>? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(assembly);
+
+        var candidates = assembly.DefinedTypes
+            .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IEvent).IsAssignableFrom(type.AsType()))
+            .Select(type => type.AsType())
+            .OrderBy(type => type.FullName, StringComparer.Ordinal);
+
+        foreach (var candidate in candidates)
+        {
+            if (filter is not null && !filter(candidate))
+                continue;
+
+            Register(candidate);
+        }
+
+        return this;
+    }
+
+    public JsonEventCodecBuilder RegisterFrom<TMarker>()
+        => RegisterFromAssembly(typeof(TMarker).Assembly);
 
     public JsonEventCodecBuilder WithStrictUnknownKinds(bool strict = true)
     {

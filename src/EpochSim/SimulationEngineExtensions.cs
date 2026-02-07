@@ -3,9 +3,9 @@ using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Kernel.Time;
 
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
-public static class SimulationEngineHostingExtensions
+public static class SimulationEngineExtensions
 {
     extension<TState>(SimulationEngine<TState> engine)
     {
