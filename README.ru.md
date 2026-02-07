@@ -145,8 +145,8 @@ dotnet run --project src/EpochSim.Cli -- bisect artifacts <runId>
 
 ## Примеры
 
-- Простой пример уровня README: `src/EpochSim.Samples/Quickstart/QuickstartSample.cs`
-- Продвинутый/legacy пример домена: `src/EpochSim.Samples/Population/`
+- Простой пример уровня README: [QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs)
+- Продвинутый/legacy пример домена: [Population](src/EpochSim.Samples/Population)
 
 ## Сборка и тесты
 
