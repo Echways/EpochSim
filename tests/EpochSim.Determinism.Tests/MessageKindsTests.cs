@@ -26,12 +26,11 @@ public sealed class MessageKindsTests
     public void KindLookup_IsCachedByType()
     {
         MessageKinds.ResetForTests();
-        var before = MessageKinds.CachedTypeCountForTests;
 
         _ = MessageKinds.GetKind(typeof(CachedEvent));
         _ = MessageKinds.GetKind(typeof(CachedEvent));
 
-        Assert.Equal(before + 1, MessageKinds.CachedTypeCountForTests);
+        Assert.Equal(1, MessageKinds.ResolveCountForTests(typeof(CachedEvent)));
     }
 
     [MessageKind("Fire")]

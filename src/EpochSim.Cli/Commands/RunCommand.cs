@@ -5,7 +5,7 @@ using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.RunArtifacts;
-using EpochSim.Hosting;
+using EpochSim;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 
@@ -78,9 +78,9 @@ public sealed class RunCommand : DomainCommandBase
         var engine = new SimulationEngine<TState>();
         adapter.ConfigureEngine(engine);
 
-        var world = adapter.CreateInitialState();
+        var simulationState = adapter.CreateInitialState();
 
-        var runBuilder = EpochSimRun.For(world)
+        var runBuilder = EpochSimRun.For(simulationState)
             .WithRootDirectory(ctx.Root)
             .WithRunId(runId)
             .WithCompression(compress)
@@ -98,12 +98,12 @@ public sealed class RunCommand : DomainCommandBase
         using var run = runBuilder.Build();
         run.AttachTo(engine);
 
-        var defaults = new RunOptions();
+        var defaultOptions = new RunOptions();
         var options = new RunOptions
         {
-            MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaults.MaxPumpStepsPerTick,
-            MaxEventsPerTick = maxEventsOpt ?? defaults.MaxEventsPerTick,
-            RngVersion = rngVersionOpt ?? defaults.RngVersion
+            MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaultOptions.MaxPumpStepsPerTick,
+            MaxEventsPerTick = maxEventsOpt ?? defaultOptions.MaxEventsPerTick,
+            RngVersion = rngVersionOpt ?? defaultOptions.RngVersion
         };
 
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ctx.Cancellation);
@@ -111,7 +111,7 @@ public sealed class RunCommand : DomainCommandBase
             cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
         engine.RunTicks(
-            world,
+            simulationState,
             seed: seed,
             start: SimTime.Zero,
             endInclusive: new SimTime(endTick),
@@ -121,7 +121,7 @@ public sealed class RunCommand : DomainCommandBase
 
         Console.WriteLine($"RunDir={run.Paths.RunDir}");
         Console.WriteLine($"RunId={run.RunId}");
-        foreach (var line in adapter.DescribeState(world))
+        foreach (var line in adapter.DescribeState(simulationState))
             Console.WriteLine(line);
 
         return 0;

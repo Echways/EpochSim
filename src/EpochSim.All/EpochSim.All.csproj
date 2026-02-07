@@ -9,8 +9,8 @@
     <PackageType>Dependency</PackageType>
 
     <PackageId>EpochSim.All</PackageId>
-    <PackageDescription>Meta-package that references the core EpochSim libraries (Kernel, Execution, Serialization, Observability).</PackageDescription>
-    <PackageTags>epochsim;meta;all;deterministic;simulation</PackageTags>
+    <PackageDescription>Batteries-included meta-package for EpochSim that references the complete module set (facade, engine, serialization, observability, kernel).</PackageDescription>
+    <PackageTags>epochsim;meta;all;batteries-included;deterministic;simulation</PackageTags>
     <Authors>Echways</Authors>
     <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
@@ -22,7 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EpochSim.Kernel\EpochSim.Kernel.csproj" />
     <ProjectReference Include="..\EpochSim.Execution\EpochSim.Execution.csproj" />
-    <ProjectReference Include="..\EpochSim.Hosting\EpochSim.Hosting.csproj" />
+    <ProjectReference Include="..\EpochSim\EpochSim.csproj" />
     <ProjectReference Include="..\EpochSim.Serialization\EpochSim.Serialization.csproj" />
     <ProjectReference Include="..\EpochSim.Observability\EpochSim.Observability.csproj" />
   </ItemGroup>

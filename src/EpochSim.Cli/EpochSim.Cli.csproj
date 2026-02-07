@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EpochSim.Execution\EpochSim.Execution.csproj" />
-    <ProjectReference Include="..\EpochSim.Hosting\EpochSim.Hosting.csproj" />
+    <ProjectReference Include="..\EpochSim\EpochSim.csproj" />
     <ProjectReference Include="..\EpochSim.Samples\EpochSim.Samples.csproj" />
     <ProjectReference Include="..\EpochSim.Observability\EpochSim.Observability.csproj" />
     <ProjectReference Include="..\EpochSim.Serialization\EpochSim.Serialization.csproj" />

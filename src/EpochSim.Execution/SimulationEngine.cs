@@ -20,11 +20,58 @@ public sealed class SimulationEngine<TState>
     internal CommandRouter<TState> CommandRouter => _commandRouter;
 
     public void AddSystem(ISystem<TState> system) => _systems.Add(system);
+    public void AddSystem(
+        string name,
+        Action<TickContext<TState>> tick,
+        Action<EventContext<TState>, IEvent>? handle = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(tick);
+
+        _systems.Add(new LambdaSystem(name, tick, handle));
+    }
+
     public void AddMiddleware(IExecutionMiddleware middleware) => _middleware.Add(middleware);
 
     public void RegisterCommandHandler<TCommand>(ICommandHandler<TState, TCommand> handler)
         where TCommand : ICommand
         => _commandRouter.Register(handler);
+
+    public void OnCommand<TCommand>(Action<TState, TCommand, IEventBuffer> handler)
+        where TCommand : ICommand
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _commandRouter.Register(new LambdaCommandHandler<TCommand>(handler));
+    }
+
+    public void RunTicks(
+        TState state,
+        ulong seed,
+        long endTickInclusive,
+        CancellationToken cancellationToken = default)
+        => RunTicks(
+            state,
+            seed,
+            start: SimTime.Zero,
+            endInclusive: new SimTime(endTickInclusive),
+            options: null,
+            context: null,
+            cancellationToken);
+
+    public void RunTicks(
+        TState state,
+        ulong seed,
+        long startTick,
+        long endTickInclusive,
+        CancellationToken cancellationToken = default)
+        => RunTicks(
+            state,
+            seed,
+            start: new SimTime(startTick),
+            endInclusive: new SimTime(endTickInclusive),
+            options: null,
+            context: null,
+            cancellationToken);
 
     public void RunTicks(
         TState state,
@@ -277,6 +324,25 @@ public sealed class SimulationEngine<TState>
             var time = currentTimeProvider();
             throw new InvalidOperationException($"Event emission during replay is not allowed (tick={time.Tick}, event={ev.GetType().Name}).");
         }
+    }
+
+    private sealed class LambdaSystem(
+        string name,
+        Action<TickContext<TState>> tick,
+        Action<EventContext<TState>, IEvent>? handle) : ISystem<TState>
+    {
+        private readonly Action<EventContext<TState>, IEvent> _handle = handle ?? ((_, _) => { });
+        public string Name => name;
+        public void Tick(TickContext<TState> ctx) => tick(ctx);
+        public void Handle(EventContext<TState> ctx, IEvent ev) => _handle(ctx, ev);
+    }
+
+    private sealed class LambdaCommandHandler<TCommand>(
+        Action<TState, TCommand, IEventBuffer> handler) : ICommandHandler<TState, TCommand>
+        where TCommand : ICommand
+    {
+        public void Handle(TState state, TCommand command, IEventBuffer events)
+            => handler(state, command, events);
     }
 
     internal void RunPump(

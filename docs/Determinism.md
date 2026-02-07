@@ -18,9 +18,9 @@ Avoid non-deterministic sources inside systems and handlers.
 - persist `statefp.jsonl` for run-to-run comparison
 - enable snapshots for fast deterministic replay
 
-## Determinism Contract
+## Determinism Rules
 
-EpochSim guarantees deterministic execution for identical inputs (initial state, seed, systems, commands/events, options). The rules below are part of the behavioral contract.
+EpochSim guarantees deterministic execution for identical inputs (initial state, seed, systems, commands/events, options). The rules below define expected behavior.
 
 ### 1) Run lifecycle
 
@@ -59,4 +59,4 @@ Within each tick, the engine repeats until both queues are empty:
 - The sequence `OnRunStart` -> ticks -> `OnRunEnd` is stable.
 - `OnRunFailed` is called exactly once.
 
-Any deviation from this contract is considered a correctness regression.
+Any deviation from these rules is considered a correctness regression.

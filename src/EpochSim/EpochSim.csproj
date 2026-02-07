@@ -10,9 +10,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>EpochSim</PackageId>
 
-    <PackageDescription>Batteries-included embedding APIs for EpochSim: run builder, artifact scope, middleware composition, and context wiring.</PackageDescription>
-    <PackageTags>epochsim;hosting;embedding;simulation;deterministic;artifacts;builder</PackageTags>
+    <PackageDescription>Facade-first package for EpochSim: ergonomic entrypoints, quick presets, and minimal wiring for deterministic runs.</PackageDescription>
+    <PackageTags>epochsim;facade;embedding;simulation;deterministic;artifacts;quickstart</PackageTags>
     <Authors>Echways</Authors>
     <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>

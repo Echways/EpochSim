@@ -1,10 +1,10 @@
-namespace EpochSim.Hosting;
+namespace EpochSim;
 
 public sealed partial class EpochSimRunScope<TState>
 {
     private Action<string>? _diagnostics;
 
-    internal partial EpochSimRunScope(EpochSimRunScopeInit<TState> init)
+    internal partial EpochSimRunScope(RunScopeInit<TState> init)
     {
         _paths = init.Paths;
         _context = init.Context;

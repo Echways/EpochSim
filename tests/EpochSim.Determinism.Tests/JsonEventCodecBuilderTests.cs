@@ -1,4 +1,5 @@
 using EpochSim.Kernel.Messaging;
+using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
 
 public sealed class JsonEventCodecBuilderTests
@@ -60,6 +61,47 @@ public sealed class JsonEventCodecBuilderTests
             .Build();
 
         Assert.Throws<InvalidOperationException>(() => codec.TryDecode("Unknown", "{}", out _));
+    }
+
+    [Fact]
+    public void RegisterFromAssembly_RespectsFilter_AndRoundTrips()
+    {
+        var codec = new JsonEventCodecBuilder()
+            .RegisterFromAssembly(
+                typeof(JsonEventCodecBuilderTests).Assembly,
+                filter: type => type == typeof(RegisteredEventA) || type == typeof(RegisteredEventB))
+            .Build();
+
+        Assert.True(codec.TryEncode(new RegisteredEventB("z"), out var kind, out var payload));
+        Assert.Equal("B", kind);
+        Assert.True(codec.TryDecode(kind, payload, out var decoded));
+        Assert.IsType<RegisteredEventB>(decoded);
+    }
+
+    [Fact]
+    public void RegisterFromAssembly_DuplicateKinds_Throws()
+    {
+        var builder = new JsonEventCodecBuilder();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            builder.RegisterFromAssembly(
+                typeof(JsonEventCodecBuilderTests).Assembly,
+                filter: type => type == typeof(RegisteredEventA) || type == typeof(KindCollisionEvent)));
+
+        Assert.Contains("already registered", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RegisterFromMarker_RegistersEventsFromMarkerAssembly()
+    {
+        var codec = new JsonEventCodecBuilder()
+            .RegisterFrom<PopulationDeltaEvent>()
+            .Build();
+
+        Assert.True(codec.TryEncode(new FireEvent(3), out var kind, out var payload));
+        Assert.Equal("Fire", kind);
+        Assert.True(codec.TryDecode(kind, payload, out var decoded));
+        Assert.IsType<FireEvent>(decoded);
     }
 
     [MessageKind("A")]

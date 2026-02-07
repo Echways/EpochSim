@@ -3,7 +3,7 @@
     <Project Path="src/EpochSim.Cli/EpochSim.Cli.csproj" />
     <Project Path="src/EpochSim.All/EpochSim.All.csproj" />
     <Project Path="src/EpochSim.Execution/EpochSim.Execution.csproj" />
-    <Project Path="src/EpochSim.Hosting/EpochSim.Hosting.csproj" />
+    <Project Path="src/EpochSim/EpochSim.csproj" />
     <Project Path="src/EpochSim.Kernel/EpochSim.Kernel.csproj" />
     <Project Path="src/EpochSim.Observability/EpochSim.Observability.csproj" />
     <Project Path="src/EpochSim.Samples/EpochSim.Samples.csproj" />

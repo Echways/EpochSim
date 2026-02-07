@@ -4,8 +4,8 @@ namespace EpochSim.Kernel.Systems;
 
 public interface ISystem<TState>
 {
-    string Name { get; }
+    string Name => GetType().Name;
 
     void Tick(TickContext<TState> ctx);
-    void Handle(EventContext<TState> ctx, IEvent ev);
+    void Handle(EventContext<TState> ctx, IEvent ev) { }
 }
