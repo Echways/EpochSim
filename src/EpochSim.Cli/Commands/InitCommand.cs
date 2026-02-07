@@ -14,7 +14,7 @@ public sealed class InitCommand : ICliCommand
         {
             ["Program.cs"] = ProgramTemplate,
             ["WorldState.cs"] = WorldStateTemplate,
-            ["Messages.cs"] = MessagesTemplate
+            ["SessionInboxExample.cs"] = SessionInboxTemplate
         };
 
         if (!Directory.EnumerateFiles(targetDir, "*.csproj").Any())
@@ -66,40 +66,16 @@ public sealed class InitCommand : ICliCommand
 
     private const string ProgramTemplate = """
         using EpochSim;
-        using EpochSim.Kernel.Messaging;
 
         var state = new WorldState();
         var engine = Epoch.CreateEngine<WorldState>();
 
-        engine.AddSystem(
-            name: "PopulationSystem",
-            tick: ctx =>
-            {
-                if (ctx.Time.Tick == 0)
-                    ctx.Commands.Enqueue(new GrowCommand(10));
-            },
-            handle: (ctx, ev) =>
-            {
-                if (ev is PopulationChanged changed)
-                    ctx.State.Population += changed.Delta;
-            });
+        engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
-        engine.OnCommand<GrowCommand>((_, command, events) =>
-        {
-            events.Emit(new PopulationChanged(command.Delta));
-        });
-
-        var codec = Epoch.JsonCodecFromAssembly<Program>();
-        var serializer = Epoch.JsonStateSerializer<WorldState>();
-
-        using var run = Epoch.RecommendedRun(
-            state,
-            codec,
-            serializer,
-            rootDir: "artifacts");
+        using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 
         engine.Attach(run);
-        engine.RunTicks(state, seed: 12345, endTickInclusive: 100);
+        engine.RunTicks(state, seed: 1, endTickInclusive: 100);
 
         Console.WriteLine($"RunId={run.RunId}");
         Console.WriteLine($"RunDir={run.Paths.RunDir}");
@@ -113,12 +89,30 @@ public sealed class InitCommand : ICliCommand
         }
         """;
 
-    private const string MessagesTemplate = """
+    private const string SessionInboxTemplate = """
+        using EpochSim;
         using EpochSim.Kernel.Messaging;
 
-        [MessageKind("Grow")]
-        public sealed record GrowCommand(int Delta) : ICommand;
+        public static class SessionInboxExample
+        {
+            public static int RunInteractiveOnce()
+            {
+                var state = new WorldState();
+                var engine = Epoch.CreateEngine<WorldState>();
+                var inbox = new CommandInbox();
 
-        public sealed record PopulationChanged(int Delta) : IEvent;
+                engine.AttachInbox(inbox);
+                engine.OnCommand<AddPopulation>((s, cmd, _) => s.Population += cmd.Delta);
+
+                using var session = engine.CreateSession(state, seed: 1, startTick: 0);
+                inbox.Enqueue(new AddPopulation(5));
+                session.TickOnce();
+
+                return state.Population;
+            }
+
+            [MessageKind("AddPopulation")]
+            private sealed record AddPopulation(int Delta) : ICommand;
+        }
         """;
 }

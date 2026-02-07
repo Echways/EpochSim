@@ -1,11 +1,85 @@
 using EpochSim;
+using EpochSim.Execution.RunArtifacts;
 using EpochSim.Kernel.Messaging;
 using EpochSim.Serialization.EventLog;
 
 public sealed class EpochFacadeTests
 {
     [Fact]
-    public void RecommendedRun_WritesCoreArtifacts()
+    public void QuickRun_WithoutCodec_WritesFingerprintAndRunMeta()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-facade-quick-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var state = new FacadeState();
+            var engine = Epoch.CreateEngine<FacadeState>();
+            engine.AddSystem("quick-system", tick: ctx => ctx.State.Value++);
+
+            RunPaths paths;
+            using (var run = Epoch.QuickRun(state, rootDir: root))
+            {
+                paths = run.Paths;
+                engine.Attach(run);
+                engine.RunTicks(state, seed: 1, endTickInclusive: 60);
+            }
+
+            Assert.Equal(61, state.Value);
+            Assert.True(File.Exists(paths.StateFpPath));
+            Assert.True(File.Exists(paths.MetaPath));
+            Assert.True(File.Exists(paths.ManifestPath));
+            Assert.True(File.Exists(paths.TracePath) || File.Exists(paths.TracePathGz));
+            Assert.True(Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").Any());
+            Assert.False(File.Exists(paths.EventsPath));
+            Assert.False(File.Exists(paths.EventsPathGz));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RecommendedRun_WithoutCodec_WritesSnapshotsAndDiagnostics()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-facade-recommended-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var state = new FacadeState();
+            var engine = Epoch.CreateEngine<FacadeState>();
+            engine.AddSystem("recommended-system", tick: ctx => ctx.State.Value++);
+
+            RunPaths paths;
+            using (var run = Epoch.RecommendedRun(state, rootDir: root))
+            {
+                paths = run.Paths;
+                engine.Attach(run);
+                engine.RunTicks(state, seed: 1, endTickInclusive: 60);
+            }
+
+            Assert.Equal(61, state.Value);
+            Assert.True(File.Exists(paths.StateFpPath));
+            Assert.True(File.Exists(paths.MetaPath));
+            Assert.True(File.Exists(paths.ManifestPath));
+            Assert.True(File.Exists(paths.TracePath) || File.Exists(paths.TracePathGz));
+            Assert.True(File.Exists(paths.ProfilePath) || File.Exists(paths.ProfilePathGz));
+            Assert.True(Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json").Any());
+            Assert.False(File.Exists(paths.EventsPath));
+            Assert.False(File.Exists(paths.EventsPathGz));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RecommendedRun_WithCodec_WritesCoreArtifacts()
     {
         var root = Path.Combine(Path.GetTempPath(), $"epochsim-facade-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -50,6 +124,15 @@ public sealed class EpochFacadeTests
                 Assert.True(File.Exists(run.Paths.ProfilePathGz));
                 Assert.True(File.Exists(run.Paths.StateFpPath));
             }
+
+            var runId = Directory
+                .EnumerateDirectories(root)
+                .Select(Path.GetFileName)
+                .First();
+
+            var paths = new RunPaths(root, runId!);
+            Assert.True(File.Exists(paths.MetaPath));
+            Assert.True(File.Exists(paths.ManifestPath));
         }
         finally
         {

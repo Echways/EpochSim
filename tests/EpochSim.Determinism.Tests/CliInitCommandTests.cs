@@ -16,8 +16,15 @@ public sealed class CliInitCommandTests
 
             Assert.True(File.Exists(Path.Combine(targetDir, "Program.cs")));
             Assert.True(File.Exists(Path.Combine(targetDir, "WorldState.cs")));
-            Assert.True(File.Exists(Path.Combine(targetDir, "Messages.cs")));
+            Assert.True(File.Exists(Path.Combine(targetDir, "SessionInboxExample.cs")));
             Assert.True(File.Exists(Path.Combine(targetDir, "EpochSim.App.csproj")));
+
+            var program = File.ReadAllText(Path.Combine(targetDir, "Program.cs"));
+            Assert.Contains("Epoch.QuickRun", program, StringComparison.Ordinal);
+
+            var inboxExample = File.ReadAllText(Path.Combine(targetDir, "SessionInboxExample.cs"));
+            Assert.Contains("CommandInbox", inboxExample, StringComparison.Ordinal);
+            Assert.Contains("CreateSession", inboxExample, StringComparison.Ordinal);
         }
         finally
         {

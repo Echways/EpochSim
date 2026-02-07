@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EpochSim.Kernel\EpochSim.Kernel.csproj" />
     <ProjectReference Include="..\EpochSim.Execution\EpochSim.Execution.csproj" />
+    <ProjectReference Include="..\EpochSim\EpochSim.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

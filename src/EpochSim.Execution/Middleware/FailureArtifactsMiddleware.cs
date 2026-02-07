@@ -12,7 +12,7 @@ namespace EpochSim.Execution.Middleware;
 public sealed class FailureArtifactsMiddleware<TState>(
     TState state,
     IStateSerializer<TState> serializer,
-    IEventCodecV2 codec,
+    IEventCodecV2? codec,
     bool snapshotEnabled,
     int tailSize = 200) : IExecutionMiddleware
 {
@@ -34,8 +34,37 @@ public sealed class FailureArtifactsMiddleware<TState>(
         if (_tailSize == 0)
             return;
 
-        if (!codec.TryEncode(ev, out var kind, out var payloadJson))
-            throw new InvalidOperationException($"No codec for event {ev.GetType().Name}");
+        string kind;
+        string payloadJson;
+
+        if (codec is not null)
+        {
+            if (!codec.TryEncode(ev, out kind, out payloadJson))
+            {
+                throw new InvalidOperationException(
+                    $"Failure artifact encoding failed for event '{ev.GetType().FullName}'. " +
+                    "Why: the configured codec does not know this event type. " +
+                    "Fix: register the event in your codec builder, for example: " +
+                    "new JsonEventCodecBuilder().Register<YourEvent>().Build().");
+            }
+        }
+        else
+        {
+            kind = ev.Kind;
+
+            try
+            {
+                payloadJson = JsonSerializer.Serialize(ev, ev.GetType(), JsonOptions);
+            }
+            catch (Exception ex) when (ex is JsonException || ex is NotSupportedException)
+            {
+                throw new InvalidOperationException(
+                    $"Failure artifact encoding failed for event '{ev.GetType().FullName}'. " +
+                    "Why: no codec was configured and runtime JSON serialization could not encode the event. " +
+                    "Fix: provide an event codec explicitly, for example: " +
+                    "Epoch.RecommendedRun(state, codec, serializer).", ex);
+            }
+        }
 
         var entry = new EventLogEntryV2(time.Tick, kind, payloadJson);
         _tail.Enqueue(entry);

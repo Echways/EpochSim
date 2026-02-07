@@ -39,6 +39,25 @@ public sealed class SimulationSessionTests
         Assert.Equal(2, session.CurrentTime.Tick);
     }
 
+    [Fact]
+    public void TickOnceLoop_MatchesRunTicks_ForDeterministicScenario()
+    {
+        var runTicksState = new WorldState();
+        var runTicksEngine = CreateEngine();
+        runTicksEngine.RunTicks(runTicksState, seed: 777, endTickInclusive: 20);
+
+        var sessionState = new WorldState();
+        var sessionEngine = CreateEngine();
+        using (var session = sessionEngine.CreateSession(sessionState, seed: 777, startTick: 0))
+        {
+            while (session.CurrentTime.Tick <= 20)
+                session.TickOnce();
+        }
+
+        Assert.Equal(runTicksState.Population, sessionState.Population);
+        Assert.Equal(runTicksState.Fires, sessionState.Fires);
+    }
+
     private static SimulationEngine<WorldState> CreateEngine()
     {
         var engine = new SimulationEngine<WorldState>();

@@ -122,6 +122,14 @@ public sealed class EpochSimRunBuilder<TState>
         return this;
     }
 
+    public EpochSimRunBuilder<TState> WithFailureArtifacts(IStateSerializer<TState> serializer, int tailSize = 200)
+    {
+        _failureSerializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _failureCodec = null;
+        _failureOptions = new FailureArtifactsRunOptions { TailSize = tailSize };
+        return this;
+    }
+
     public EpochSimRunBuilder<TState> WithRecommendedDefaults(
         IEventCodecV2 codec,
         IStateSerializer<TState> serializer,
@@ -149,11 +157,39 @@ public sealed class EpochSimRunBuilder<TState>
         return this;
     }
 
+    public EpochSimRunBuilder<TState> WithRecommendedDefaults(
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        WithCompression(true);
+        WithSnapshots(serializer, everyTicks: RecommendedSnapshotEveryTicks);
+        WithStateFingerprints(serializer, everyTicks: RecommendedFingerprintEveryTicks);
+        WithTraceJsonl();
+        WithProfilingJsonl();
+        WithFailureArtifacts(serializer, tailSize: RecommendedFailureTailSize);
+
+        if (invariants is not null)
+        {
+            var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
+            if (invariantList.Count > 0)
+                WithInvariants(invariantList, checkEveryTicks: RecommendedInvariantEveryTicks);
+        }
+
+        return this;
+    }
+
     public EpochSimRunScope<TState> BuildRecommended(
         IEventCodecV2 codec,
         IStateSerializer<TState> serializer,
         IEnumerable<IInvariant<TState>>? invariants = null)
         => WithRecommendedDefaults(codec, serializer, invariants).Build();
+
+    public EpochSimRunScope<TState> BuildRecommended(
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => WithRecommendedDefaults(serializer, invariants).Build();
 
     public EpochSimRunScope<TState> Build()
     {
@@ -216,7 +252,7 @@ public sealed class EpochSimRunBuilder<TState>
         if (_invariantOptions is not null && _invariants.Count > 0)
             middleware.Add(new InvariantMiddleware<TState>(_state, _invariants, _invariantOptions.CheckEveryTicks));
 
-        if (_failureOptions is not null && _failureSerializer is not null && _failureCodec is not null)
+        if (_failureOptions is not null && _failureSerializer is not null)
         {
             var snapshotsEnabled = _snapshotOptions is not null;
             middleware.Add(new FailureArtifactsMiddleware<TState>(
