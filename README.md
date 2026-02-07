@@ -155,7 +155,7 @@ dotnet run --project src/EpochSim.Cli -- bisect artifacts <runId>
 ## Samples
 
 - Recommended simple sample: [QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs)
-- Advanced/legacy domain sample: [Event-heavy diagnostic domain)](src/EpochSim.Samples/Population/)
+- Advanced/legacy domain sample: [Event-heavy diagnostic domain](src/EpochSim.Samples/Population/)
 
 ## Build and Test
 
