@@ -57,7 +57,6 @@ public sealed class RngTests
         for (int i = 0; i < 100; i++)
             values.Add(rng.NextU64());
 
-        // All 100 values should be distinct — seed 0 must not produce a degenerate (constant) sequence
         Assert.Equal(100, values.Count);
     }
 

@@ -49,4 +49,18 @@ public static class Epoch
         string? rootDir = null,
         IEnumerable<IInvariant<TState>>? invariants = null)
         => EpochSimRun.Recommended(state, codec, serializer, rootDir, invariants);
+
+    public static EpochSimRunScope<TState> DebugRun<TState>(
+        TState state,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => EpochSimRun.Debug(state, rootDir, invariants);
+
+    public static EpochSimRunScope<TState> DebugRun<TState>(
+        TState state,
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => EpochSimRun.Debug(state, codec, serializer, rootDir, invariants);
 }

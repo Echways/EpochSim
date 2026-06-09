@@ -14,6 +14,8 @@ public static class RunMetaWriter
         builder.AppendLine($"endTick={endTick}");
         builder.AppendLine($"snapEvery={snapEvery}");
         builder.AppendLine($"fingerprintEvery={fingerprintEvery}");
-        File.WriteAllText(paths.MetaPath, builder.ToString());
+        var tmp = paths.MetaPath + ".tmp";
+        File.WriteAllText(tmp, builder.ToString());
+        File.Move(tmp, paths.MetaPath, overwrite: true);
     }
 }

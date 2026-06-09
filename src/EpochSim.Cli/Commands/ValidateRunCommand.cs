@@ -16,11 +16,33 @@ namespace EpochSim.Cli.Commands;
 
 public sealed class ValidateRunCommand : DomainCommandBase
 {
+    public string Help =>
+        """
+        validate-run <artifactsRoot> [runId] [--end-tick N] [--seed N] [--guard-state] [--compress]
+            [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]
+            [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]
+
+        Run the simulation with invariant checking and write artifacts to <artifactsRoot>.
+
+          --end-tick N           Last tick to simulate (default: 500)
+          --seed N               RNG seed (default: 12345)
+          --guard-state          Enable mutation guard (throws if system mutates state during tick)
+          --compress             Write gzip-compressed event log
+          --snapshot-every N     Snapshot state every N ticks (default: 50)
+          --fingerprint-every N  Record fingerprint every N ticks (default: 1)
+          --max-pump-steps N     Max pump iterations per tick
+          --max-events-per-tick N  Max events dispatched per tick
+          --rng-version v1|v2    RNG algorithm version (default: v2)
+          --cancel-after-ms N    Abort after N milliseconds
+        """;
+
     protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
         var positional = new List<string>();
         var guardState = false;
         var compress = false;
+        long? endTickOpt = null;
+        ulong? seedOpt = null;
         long? snapshotEveryOpt = null;
         long? fingerprintEveryOpt = null;
         int? maxPumpStepsOpt = null;
@@ -39,6 +61,12 @@ public sealed class ValidateRunCommand : DomainCommandBase
 
             switch (arg.ToLowerInvariant())
             {
+                case "--end-tick":
+                    if (TryReadLong(args, ref i, out var endTickArg)) endTickOpt = endTickArg;
+                    break;
+                case "--seed":
+                    if (TryReadUlong(args, ref i, out var seedArg)) seedOpt = seedArg;
+                    break;
                 case "--guard-state":
                     guardState = true;
                     break;
@@ -67,9 +95,9 @@ public sealed class ValidateRunCommand : DomainCommandBase
         }
 
         var runArg = positional.Count > 0 ? positional[0] : "";
-        var endTick = positional.Count > 1 && CliParsing.TryParseLong(positional[1], out var et) ? et : 500;
+        var endTick = endTickOpt ?? (positional.Count > 1 && CliParsing.TryParseLong(positional[1], out var et) ? et : 500);
         var snapEvery = snapshotEveryOpt ?? (positional.Count > 2 && CliParsing.TryParseLong(positional[2], out var se) ? se : 50);
-        var seed = positional.Count > 3 && CliParsing.TryParseUlong(positional[3], out var sd) ? sd : 12345UL;
+        var seed = seedOpt ?? (positional.Count > 3 && CliParsing.TryParseUlong(positional[3], out var sd) ? sd : 12345UL);
         var fingerprintEvery = fingerprintEveryOpt ?? 1;
         if (fingerprintEvery <= 0) fingerprintEvery = 1;
 
@@ -160,6 +188,16 @@ public sealed class ValidateRunCommand : DomainCommandBase
 
         index++;
         return CliParsing.TryParseLong(args[index], out value);
+    }
+
+    private static bool TryReadUlong(string[] args, ref int index, out ulong value)
+    {
+        value = default;
+        if (index + 1 >= args.Length)
+            return false;
+
+        index++;
+        return CliParsing.TryParseUlong(args[index], out value);
     }
 
     private static bool TryReadInt(string[] args, ref int index, out int value)

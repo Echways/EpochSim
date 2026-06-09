@@ -14,9 +14,44 @@ namespace EpochSim.Cli.Commands;
 
 public sealed class VerifyRunCommand : DomainCommandBase
 {
+    public string Help =>
+        """
+        verify-run <artifactsRoot> [runId] [--end-tick N] [--seed N]
+
+        Replay the simulation and compare state fingerprints against the recorded run.
+        Returns exit code 3 if a mismatch is found, 0 on success.
+
+          --end-tick N   Last tick to verify (default: from manifest/meta or 500)
+          --seed N       RNG seed override (default: from manifest/meta or 12345)
+        """;
+
     protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
-        var runArg = args.Length > 0 ? args[0] : "";
+        var positional = new List<string>();
+        long? endTickOpt = null;
+        ulong? seedOpt = null;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            if (!CliParsing.IsOption(arg))
+            {
+                positional.Add(arg);
+                continue;
+            }
+
+            switch (arg.ToLowerInvariant())
+            {
+                case "--end-tick":
+                    if (i + 1 < args.Length && CliParsing.TryParseLong(args[i + 1], out var et)) { endTickOpt = et; i++; }
+                    break;
+                case "--seed":
+                    if (i + 1 < args.Length && CliParsing.TryParseUlong(args[i + 1], out var sd)) { seedOpt = sd; i++; }
+                    break;
+            }
+        }
+
+        var runArg = positional.Count > 0 ? positional[0] : "";
 
         var codec = adapter.Codec;
         var stateSerializer = adapter.Serializer;
@@ -30,11 +65,13 @@ public sealed class VerifyRunCommand : DomainCommandBase
         var meta = RunMetaReader.Read(paths.MetaPath);
         var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
-        var endTick = args.Length > 1 && CliParsing.TryParseLong(args[1], out var endTickArg) ? endTickArg
-            : (manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500));
+        var endTick = endTickOpt
+            ?? (positional.Count > 1 && CliParsing.TryParseLong(positional[1], out var endTickPos) ? endTickPos : (long?)null)
+            ?? manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500);
 
-        var seed = args.Length > 3 && CliParsing.TryParseUlong(args[3], out var seedArg) ? seedArg
-            : (manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL));
+        var seed = seedOpt
+            ?? (positional.Count > 3 && CliParsing.TryParseUlong(positional[3], out var seedPos) ? seedPos : (ulong?)null)
+            ?? manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL);
 
         var fingerprintEvery = manifest?.FingerprintEvery
             ?? (RunMetaReader.TryGetLong(meta, "fingerprintEvery", out var fingerprintEveryMeta) ? fingerprintEveryMeta : 1);

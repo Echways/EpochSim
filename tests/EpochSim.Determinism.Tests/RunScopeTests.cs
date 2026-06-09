@@ -114,7 +114,7 @@ public sealed class RunScopeTests
                 Assert.Same(state, run.State);
                 paths = run.Paths;
                 run.RunTicks(engine, seed: 42, endTickInclusive: 10);
-            } // Dispose writes manifest
+            }
 
             Assert.True(File.Exists(paths.ManifestPath));
         }

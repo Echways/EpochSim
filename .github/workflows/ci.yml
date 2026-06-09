@@ -37,11 +37,6 @@ jobs:
       - name: Build (Release, warnings as errors)
         run: dotnet build ./EpochSim.slnx -c Release --no-restore -p:TreatWarningsAsErrors=true
 
-      - name: Install dotnet-format
-        run: |
-          dotnet tool install -g dotnet-format
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-
       - name: Lint (dotnet format verify)
         run: dotnet format ./EpochSim.slnx --verify-no-changes --no-restore
 

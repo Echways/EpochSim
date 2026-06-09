@@ -37,9 +37,6 @@ public sealed class EventLogWriter : IDisposable
         _writer.Dispose();
     }
 
-    // Encodes the string as a safe JSON string value using JavaScriptEncoder.Default, which
-    // correctly escapes all control characters < 0x20 (including \b, \f), embedded quotes,
-    // backslashes, and Unicode line/paragraph separators U+2028 and U+2029.
     private void WriteEscaped(string s)
     {
         if (s.Length == 0) return;

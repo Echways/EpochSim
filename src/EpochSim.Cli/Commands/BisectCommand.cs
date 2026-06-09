@@ -14,11 +14,44 @@ namespace EpochSim.Cli.Commands;
 
 public sealed class BisectCommand : DomainCommandBase
 {
+    public string Help =>
+        """
+        bisect <artifactsRoot> [runId] [--end-tick N] [--seed N]
+
+        Binary-search the event log to find the first tick where an invariant is violated.
+        Returns exit code 2 with FirstViolationTick when a violation is found, 0 otherwise.
+
+          --end-tick N   Last tick to search (default: from manifest/meta or 500)
+          --seed N       RNG seed override (default: from manifest/meta or 12345)
+        """;
+
     protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
     {
-        var runArg = args.Length > 0 ? args[0] : "";
-        var endTickArg = args.Length > 1 ? args[1] : null;
-        var seedArg = args.Length > 3 ? args[3] : null;
+        var positional = new List<string>();
+        long? endTickOpt = null;
+        ulong? seedOpt = null;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            if (!CliParsing.IsOption(arg))
+            {
+                positional.Add(arg);
+                continue;
+            }
+
+            switch (arg.ToLowerInvariant())
+            {
+                case "--end-tick":
+                    if (i + 1 < args.Length && CliParsing.TryParseLong(args[i + 1], out var et)) { endTickOpt = et; i++; }
+                    break;
+                case "--seed":
+                    if (i + 1 < args.Length && CliParsing.TryParseUlong(args[i + 1], out var sd)) { seedOpt = sd; i++; }
+                    break;
+            }
+        }
+
+        var runArg = positional.Count > 0 ? positional[0] : "";
 
         var codec = adapter.Codec;
         var stateSerializer = adapter.Serializer;
@@ -32,11 +65,13 @@ public sealed class BisectCommand : DomainCommandBase
         var meta = RunMetaReader.Read(paths.MetaPath);
         var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
-        var endTick = endTickArg is not null && CliParsing.TryParseLong(endTickArg, out var endTickParsed) ? endTickParsed
-            : (manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500));
+        var endTick = endTickOpt
+            ?? (positional.Count > 1 && CliParsing.TryParseLong(positional[1], out var endTickPos) ? endTickPos : (long?)null)
+            ?? manifest?.EndTick ?? (RunMetaReader.TryGetLong(meta, "endTick", out var endTickMeta) ? endTickMeta : 500);
 
-        var seed = seedArg is not null && CliParsing.TryParseUlong(seedArg, out var seedParsed) ? seedParsed
-            : (manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL));
+        var seed = seedOpt
+            ?? (positional.Count > 3 && CliParsing.TryParseUlong(positional[3], out var seedPos) ? seedPos : (ulong?)null)
+            ?? manifest?.Seed ?? (RunMetaReader.TryGetUlong(meta, "seed", out var seedMeta) ? seedMeta : 12345UL);
 
         var eventsPath = paths.ResolveEventsPath();
         if (!File.Exists(eventsPath))

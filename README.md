@@ -26,8 +26,7 @@ var engine = Epoch.CreateEngine<WorldState>();
 engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
 using var run = Epoch.QuickRun(state, rootDir: "artifacts");
-engine.Attach(run);
-engine.RunTicks(state, seed: 1, endTickInclusive: 100);
+run.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
 Console.WriteLine(state.Population);
 
@@ -37,27 +36,37 @@ public sealed class WorldState
 }
 ```
 
+> **Note**: always call `run.RunTicks(engine, ...)` — not `engine.RunTicks(state, ...)` — to avoid
+> silently passing a different state instance than the one the run scope was built with.
+
 This is the fastest path: useful artifacts, deterministic run, almost zero wiring.
 
-## Recommended Artifacts
+## Preset Cost Table
 
-`QuickRun`:
-- Best for first use and basic debugging.
-- Enables deterministic run metadata + snapshots + state fingerprints + trace.
-- No event codec required.
+| Preset | Fingerprint cadence | Mutation guard | Typical use |
+|---|---|---|---|
+| `QuickRun` | every tick | ✗ | First use, CI smoke test |
+| `RecommendedRun` | every 50 ticks | ✗ | Production debugging |
+| `DebugRun` | every tick | ✓ | Invariant hunting, strict mode |
+
+**Mutation guard** serialises state before and after each system tick and throws
+`InvalidOperationException` if the fingerprint changes. Useful for finding systems that
+mutate state outside of event handlers, but has significant serialisation overhead — keep
+it in `DebugRun` only.
 
 ```csharp
+// QuickRun — zero-config, no codec needed
 using var run = Epoch.QuickRun(state, rootDir: "artifacts");
-```
+run.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
-`RecommendedRun`:
-- Best for real debugging in apps and services.
-- Enables fingerprints + snapshots + trace + profiling + failure artifacts.
-- No codec required for this baseline.
-- Add invariants when needed.
+// RecommendedRun — adds profiling + failure artifacts
+using var run = Epoch.RecommendedRun(state, rootDir: "artifacts");
+run.RunTicks(engine, seed: 1, endTickInclusive: 1000);
 
-```csharp
-using var run = Epoch.RecommendedRun(state, rootDir: "artifacts", invariants: null);
+// DebugRun — every-tick fingerprinting + mutation guard
+var serializer = Epoch.JsonStateSerializer<WorldState>();
+using var run = Epoch.DebugRun(state, serializer, rootDir: "artifacts");
+run.RunTicks(engine, seed: 1, endTickInclusive: 200);
 ```
 
 Advanced overloads stay available when you want full control:
@@ -83,12 +92,50 @@ using var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifac
 public sealed record Changed(int Delta) : IEvent;
 ```
 
+## Reading Artifacts In-Process
+
+After a run completes you can read artifacts directly from the run paths without going
+through the CLI:
+
+```csharp
+using EpochSim;
+using EpochSim.Execution.RunArtifacts;
+using EpochSim.Execution.StateFingerprint;
+using EpochSim.Serialization.EventLog;    // EventLogReader, EventLogEntryV2
+using EpochSim.Serialization.State;
+
+var state = new WorldState();
+var serializer = Epoch.JsonStateSerializer<WorldState>();
+var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Changed));
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
+string runDir;
+using (var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts"))
+{
+    run.RunTicks(engine, seed: 1, endTickInclusive: 100);
+    runDir = run.Paths.RunDir;
+}
+
+// Read the manifest written by Dispose()
+var manifest = RunManifestReader.TryRead(Path.Combine(runDir, "manifest.json"));
+Console.WriteLine($"EndTick={manifest?.EndTick}");
+
+// Read per-tick fingerprints
+var fingerprints = JsonlStateFingerprintWriter.ReadAll(Path.Combine(runDir, "statefp.jsonl"));
+Console.WriteLine($"Fingerprints recorded: {fingerprints.Count}");
+
+// Read event log entries
+var entries = EventLogReader.ReadAll(Path.Combine(runDir, "events.jsonl"));
+Console.WriteLine($"Events logged: {entries.Count}");
+```
+
 ## RunTicks vs Session
 
 Use `RunTicks` for batch jobs:
 
 ```csharp
-engine.RunTicks(state, seed: 1, endTickInclusive: 1000);
+run.RunTicks(engine, seed: 1, endTickInclusive: 1000);
 ```
 
 Use `SimulationSession<TState>` for long-lived loops (games, servers, interactive stepping):

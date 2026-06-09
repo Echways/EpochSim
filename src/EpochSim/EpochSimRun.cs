@@ -63,4 +63,33 @@ public static class EpochSimRun
 
         return builder.BuildRecommended(codec, serializer, invariants);
     }
+
+    public static EpochSimRunScope<TState> Debug<TState>(
+        TState state,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        var serializer = new JsonStateSerializer<TState>();
+        var builder = For(state);
+
+        if (!string.IsNullOrWhiteSpace(rootDir))
+            builder.WithRootDirectory(rootDir);
+
+        return builder.BuildDebug(serializer, invariants);
+    }
+
+    public static EpochSimRunScope<TState> Debug<TState>(
+        TState state,
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        string? rootDir = null,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        var builder = For(state);
+
+        if (!string.IsNullOrWhiteSpace(rootDir))
+            builder.WithRootDirectory(rootDir);
+
+        return builder.BuildDebug(codec, serializer, invariants);
+    }
 }

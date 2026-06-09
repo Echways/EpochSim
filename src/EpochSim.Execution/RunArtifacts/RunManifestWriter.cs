@@ -13,7 +13,9 @@ public static class RunManifestWriter
     public static void Write(string path, RunManifest manifest)
     {
         var json = JsonSerializer.Serialize(manifest, SerializerOptions);
-        File.WriteAllText(path, json);
+        var tmp = path + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Move(tmp, path, overwrite: true);
     }
 
     public static string GetEngineVersion()

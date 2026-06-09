@@ -13,9 +13,13 @@ namespace EpochSim;
 public sealed class EpochSimRunBuilder<TState>
 {
     private const long RecommendedSnapshotEveryTicks = 50;
-    private const long RecommendedFingerprintEveryTicks = 1;
-    private const long RecommendedInvariantEveryTicks = 1;
+    private const long RecommendedFingerprintEveryTicks = 50;
     private const int RecommendedFailureTailSize = 200;
+
+    private const long DebugSnapshotEveryTicks = 50;
+    private const long DebugFingerprintEveryTicks = 1;
+    private const long DebugInvariantEveryTicks = 1;
+    private const int DebugFailureTailSize = 200;
 
     private readonly TState _state;
     private EpochSimRunOptions _runOptions = new();
@@ -144,14 +148,13 @@ public sealed class EpochSimRunBuilder<TState>
         WithStateFingerprints(serializer, everyTicks: RecommendedFingerprintEveryTicks);
         WithTraceJsonl();
         WithProfilingJsonl();
-        WithStateMutationGuard(serializer);
         WithFailureArtifacts(serializer, codec, tailSize: RecommendedFailureTailSize);
 
         if (invariants is not null)
         {
             var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
             if (invariantList.Count > 0)
-                WithInvariants(invariantList, checkEveryTicks: RecommendedInvariantEveryTicks);
+                WithInvariants(invariantList, checkEveryTicks: 1);
         }
 
         return this;
@@ -174,7 +177,58 @@ public sealed class EpochSimRunBuilder<TState>
         {
             var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
             if (invariantList.Count > 0)
-                WithInvariants(invariantList, checkEveryTicks: RecommendedInvariantEveryTicks);
+                WithInvariants(invariantList, checkEveryTicks: 1);
+        }
+
+        return this;
+    }
+
+    public EpochSimRunBuilder<TState> WithDebugDefaults(
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        ArgumentNullException.ThrowIfNull(codec);
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        WithCompression(false);
+        WithEventLog(codec);
+        WithSnapshots(serializer, everyTicks: DebugSnapshotEveryTicks);
+        WithStateFingerprints(serializer, everyTicks: DebugFingerprintEveryTicks);
+        WithTraceJsonl();
+        WithProfilingJsonl();
+        WithStateMutationGuard(serializer);
+        WithFailureArtifacts(serializer, codec, tailSize: DebugFailureTailSize);
+
+        if (invariants is not null)
+        {
+            var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
+            if (invariantList.Count > 0)
+                WithInvariants(invariantList, checkEveryTicks: DebugInvariantEveryTicks);
+        }
+
+        return this;
+    }
+
+    public EpochSimRunBuilder<TState> WithDebugDefaults(
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+    {
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        WithCompression(false);
+        WithSnapshots(serializer, everyTicks: DebugSnapshotEveryTicks);
+        WithStateFingerprints(serializer, everyTicks: DebugFingerprintEveryTicks);
+        WithTraceJsonl();
+        WithProfilingJsonl();
+        WithStateMutationGuard(serializer);
+        WithFailureArtifacts(serializer, tailSize: DebugFailureTailSize);
+
+        if (invariants is not null)
+        {
+            var invariantList = invariants as IReadOnlyList<IInvariant<TState>> ?? invariants.ToArray();
+            if (invariantList.Count > 0)
+                WithInvariants(invariantList, checkEveryTicks: DebugInvariantEveryTicks);
         }
 
         return this;
@@ -190,6 +244,17 @@ public sealed class EpochSimRunBuilder<TState>
         IStateSerializer<TState> serializer,
         IEnumerable<IInvariant<TState>>? invariants = null)
         => WithRecommendedDefaults(serializer, invariants).Build();
+
+    public EpochSimRunScope<TState> BuildDebug(
+        IEventCodecV2 codec,
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => WithDebugDefaults(codec, serializer, invariants).Build();
+
+    public EpochSimRunScope<TState> BuildDebug(
+        IStateSerializer<TState> serializer,
+        IEnumerable<IInvariant<TState>>? invariants = null)
+        => WithDebugDefaults(serializer, invariants).Build();
 
     public EpochSimRunScope<TState> Build()
     {

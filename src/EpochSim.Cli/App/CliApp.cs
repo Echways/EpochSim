@@ -61,6 +61,13 @@ public sealed class CliApp
             return Task.FromResult(2);
         }
 
+        if (commandArgs.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine(command.Help);
+            return Task.FromResult(0);
+        }
+
         try
         {
             var rc = command.Execute(ctx, commandArgs);
@@ -77,16 +84,22 @@ public sealed class CliApp
     {
         Console.WriteLine("Usage:");
         Console.WriteLine("  init [targetDir]");
-        Console.WriteLine("  run <artifactsRoot> [runId] [endTick] [snapEvery] [seed] [--guard-state] [--compress] [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N] [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
-        Console.WriteLine("  validate-run <artifactsRoot> [runId] [endTick] [snapEvery] [seed] [--guard-state] [--compress] [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N] [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
-        Console.WriteLine("  fast-replay <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
-        Console.WriteLine("  verify-run <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
+        Console.WriteLine("  run <artifactsRoot> [runId] --end-tick N --seed N [--guard-state] [--compress]");
+        Console.WriteLine("      [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]");
+        Console.WriteLine("      [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
+        Console.WriteLine("  validate-run <artifactsRoot> [runId] --end-tick N --seed N [--guard-state] [--compress]");
+        Console.WriteLine("      [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]");
+        Console.WriteLine("      [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
+        Console.WriteLine("  fast-replay <artifactsRoot> [runId] [--end-tick N] [--seed N]");
+        Console.WriteLine("  verify-run <artifactsRoot> [runId] [--end-tick N] [--seed N]");
+        Console.WriteLine("  bisect <artifactsRoot> [runId] [--end-tick N] [--seed N]");
         Console.WriteLine("  event-stats <artifactsRoot> [runId?] [topN?] [fromTick?] [toTick?] [--only K|--kind K]...");
         Console.WriteLine("  timeline <artifactsRoot> [runId?] [fromTick?] [toTick?] [maxPerTick?] [maxPayloadChars?] [--only K|--kind K]...");
         Console.WriteLine("  pretty-inspect <artifactsRoot> [runIdOrRunDirOrEmptyForLatest]");
         Console.WriteLine("  list-runs <artifactsRoot> [limit]");
         Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
-        Console.WriteLine("  bisect <artifactsRoot> [runIdOrRunDirOrEmptyForLatestWithEvents] [endTick] [ignored] [seed]");
         Console.WriteLine("  repro <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [failureTickOrEmptyForLatest] [seedOverride]");
+        Console.WriteLine();
+        Console.WriteLine("Pass --help to any command for detailed usage.");
     }
 }
