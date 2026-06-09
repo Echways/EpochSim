@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using EpochSim.Kernel.Time;
 using EpochSim.Kernel.Messaging;
+using EpochSim.Kernel.Time;
 
 namespace EpochSim.Kernel.Scheduling;
 

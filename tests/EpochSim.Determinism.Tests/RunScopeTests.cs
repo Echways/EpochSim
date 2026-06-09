@@ -1,5 +1,5 @@
-using EpochSim.Execution;
 using EpochSim;
+using EpochSim.Execution;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Kernel.Time;
 using EpochSim.Samples.Population;

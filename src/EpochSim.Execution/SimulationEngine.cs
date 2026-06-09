@@ -1,3 +1,4 @@
+using System.Threading;
 using EpochSim.Execution.Middleware;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Messaging;
@@ -5,7 +6,6 @@ using EpochSim.Kernel.Scheduling;
 using EpochSim.Kernel.Systems;
 using EpochSim.Kernel.Time;
 using EpochSim.Serialization.EventLog;
-using System.Threading;
 
 namespace EpochSim.Execution;
 

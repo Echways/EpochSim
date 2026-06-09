@@ -42,3 +42,13 @@ jobs:
 
       - name: Test
         run: dotnet test ./EpochSim.slnx -c Release --no-build --verbosity normal
+
+      - name: Pack (verify packages build)
+        run: |
+          dotnet pack src/EpochSim.Kernel        -c Release --no-build
+          dotnet pack src/EpochSim               -c Release --no-build
+          dotnet pack src/EpochSim.Execution     -c Release --no-build
+          dotnet pack src/EpochSim.Serialization -c Release --no-build
+          dotnet pack src/EpochSim.Observability -c Release --no-build
+          dotnet pack src/EpochSim.Cli           -c Release --no-build
+          dotnet pack src/EpochSim.All           -c Release --no-build

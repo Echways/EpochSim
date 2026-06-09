@@ -1,11 +1,11 @@
 using System;
 using System.Threading;
+using EpochSim;
 using EpochSim.Cli.App;
 using EpochSim.Cli.Domain;
 using EpochSim.Cli.Parsing;
 using EpochSim.Execution;
 using EpochSim.Execution.RunArtifacts;
-using EpochSim;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Time;
 
