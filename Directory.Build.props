@@ -10,6 +10,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
 
     <!-- Symbol packages (PDB embedded in .snupkg) -->
+    <DebugType>portable</DebugType>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
