@@ -45,27 +45,15 @@ jobs:
           dotnet pack src/EpochSim.Cli       -c Release --no-restore
           dotnet pack src/EpochSim.All       -c Release --no-restore
 
-      - name: Get NuGet API key via OIDC
-        id: oidc
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const oidcToken = await core.getIDToken('api.nuget.org');
-            const resp = await fetch('https://www.nuget.org/api/v1/authentication/authenticate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: oidcToken })
-            });
-            if (!resp.ok) throw new Error(`Token exchange failed: ${resp.status} ${await resp.text()}`);
-            const { apiKey } = await resp.json();
-            core.setSecret(apiKey);
-            core.setOutput('token', apiKey);
+      - name: NuGet login (OIDC)
+        id: nuget-login
+        uses: NuGet/login@v3
 
       - name: Push all packages
         run: |
           for pkg in src/*/bin/Release/*.nupkg; do
             dotnet nuget push "$pkg" \
-              --api-key "${{ steps.oidc.outputs.token }}" \
+              --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
