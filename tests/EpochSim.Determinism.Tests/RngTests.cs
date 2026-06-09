@@ -35,4 +35,41 @@ public sealed class RngTests
         for (int i = 0; i < buckets.Length; i++)
             Assert.True(buckets[i] > 0, $"Bucket {i} was never hit.");
     }
+
+    [Theory]
+    [InlineData(5, 5)]
+    [InlineData(10, 5)]
+    [InlineData(0, -1)]
+    public void NextInt_InvalidRange_ThrowsArgumentOutOfRangeWithParamName(int min, int max)
+    {
+        var rng = new DeterministicRng(1);
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => rng.NextInt(min, max));
+        Assert.Equal("maxExclusive", ex.ParamName);
+        Assert.Contains("maxExclusive", ex.Message);
+        Assert.Contains("minInclusive", ex.Message);
+    }
+
+    [Fact]
+    public void Seed0_ProducesNonDegenerateSequence()
+    {
+        var rng = new DeterministicRng(0);
+        var values = new HashSet<ulong>();
+        for (int i = 0; i < 100; i++)
+            values.Add(rng.NextU64());
+
+        // All 100 values should be distinct — seed 0 must not produce a degenerate (constant) sequence
+        Assert.Equal(100, values.Count);
+    }
+
+    [Fact]
+    public void Seed0_DifferentFrom_Seed1()
+    {
+        var rng0 = new DeterministicRng(0);
+        var rng1 = new DeterministicRng(1);
+
+        var seq0 = Enumerable.Range(0, 10).Select(_ => rng0.NextU64()).ToArray();
+        var seq1 = Enumerable.Range(0, 10).Select(_ => rng1.NextU64()).ToArray();
+
+        Assert.False(seq0.SequenceEqual(seq1), "seed=0 and seed=1 must produce different sequences.");
+    }
 }

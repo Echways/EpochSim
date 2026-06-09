@@ -1,3 +1,4 @@
+using System.Threading;
 using EpochSim.Execution;
 using EpochSim.Execution.Middleware;
 using EpochSim.Execution.RunArtifacts;
@@ -7,6 +8,7 @@ namespace EpochSim;
 
 public sealed partial class EpochSimRunScope<TState> : IDisposable
 {
+    private readonly TState _state;
     private readonly RunPaths _paths;
     private readonly RunContext _context;
     private readonly IExecutionMiddleware _middleware;
@@ -29,6 +31,12 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
     public RunPaths Paths => _paths;
     public RunContext Context => _context;
 
+    /// <summary>
+    /// The state instance this scope was built with. Use this to verify the correct state is
+    /// being passed to the engine; prefer <see cref="RunTicks"/> to avoid passing state twice.
+    /// </summary>
+    public TState State => _state;
+
     public void AttachTo(SimulationEngine<TState> engine)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -39,6 +47,56 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
         engine.AddMiddleware(_middleware);
         _attached = true;
         PublishDiagnostic($"Run scope attached to {engine.GetType().Name}.");
+    }
+
+    /// <summary>
+    /// Attaches this scope to <paramref name="engine"/> and immediately runs ticks using the bound state.
+    /// Prefer this over calling <c>AttachTo</c> + <c>engine.RunTicks</c> separately to avoid accidentally
+    /// passing a different state object to the engine.
+    /// </summary>
+    public void RunTicks(
+        SimulationEngine<TState> engine,
+        ulong seed,
+        long endTickInclusive,
+        RunOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        AttachTo(engine);
+        engine.RunTicks(_state, seed, SimTime.Zero, new SimTime(endTickInclusive), options, _context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Attaches this scope to <paramref name="engine"/> and immediately runs ticks using the bound state.
+    /// Prefer this over calling <c>AttachTo</c> + <c>engine.RunTicks</c> separately to avoid accidentally
+    /// passing a different state object to the engine.
+    /// </summary>
+    public void RunTicks(
+        SimulationEngine<TState> engine,
+        ulong seed,
+        SimTime start,
+        SimTime endInclusive,
+        RunOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        AttachTo(engine);
+        engine.RunTicks(_state, seed, start, endInclusive, options, _context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Attaches this scope to <paramref name="engine"/> and creates a session using the bound state.
+    /// Prefer this over calling <c>AttachTo</c> + <c>engine.CreateSession</c> separately.
+    /// </summary>
+    public SimulationSession<TState> CreateSession(
+        SimulationEngine<TState> engine,
+        ulong seed,
+        long startTick = 0,
+        RunOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        AttachTo(engine);
+        return engine.CreateSession(_state, seed, new SimTime(startTick), options, _context);
     }
 
     public void Dispose()

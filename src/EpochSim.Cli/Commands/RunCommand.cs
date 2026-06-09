@@ -96,7 +96,6 @@ public sealed class RunCommand : DomainCommandBase
             runBuilder.WithStateMutationGuard(stateSerializer);
 
         using var run = runBuilder.Build();
-        run.AttachTo(engine);
 
         var defaultOptions = new RunOptions();
         var options = new RunOptions
@@ -110,13 +109,12 @@ public sealed class RunCommand : DomainCommandBase
         if (cancelAfterMsOpt.HasValue && cancelAfterMsOpt.Value > 0)
             cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
-        engine.RunTicks(
-            simulationState,
+        run.RunTicks(
+            engine,
             seed: seed,
             start: SimTime.Zero,
             endInclusive: new SimTime(endTick),
             options: options,
-            context: run.Context,
             cancellationToken: cancellation.Token);
 
         Console.WriteLine($"RunDir={run.Paths.RunDir}");

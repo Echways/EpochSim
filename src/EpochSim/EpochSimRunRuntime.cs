@@ -7,6 +7,7 @@ using EpochSim.Observability.Tracing;
 namespace EpochSim;
 
 internal sealed record RunScopeInit<TState>(
+    TState State,
     RunPaths Paths,
     RunContext Context,
     IExecutionMiddleware Middleware,

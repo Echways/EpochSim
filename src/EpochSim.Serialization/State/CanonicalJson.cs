@@ -42,7 +42,20 @@ public static class CanonicalJson
                 break;
 
             case JsonValueKind.Number:
-                writer.WriteRawValue(element.GetRawText(), skipInputValidation: true);
+                // Normalize numbers so that equivalent values (e.g. 1.0 and 1, 2.50 and 2.5)
+                // produce the same canonical form and therefore the same fingerprint.
+                // Integer-valued numbers are written without a decimal point.
+                // Non-integer doubles are written via WriteNumberValue which uses G17 round-trip format.
+                // Limitation: numbers outside the double precision range (> 2^53) that are not
+                // representable as int64/uint64 fall back to raw text; see Determinism.md.
+                if (element.TryGetInt64(out var longVal))
+                    writer.WriteNumberValue(longVal);
+                else if (element.TryGetUInt64(out var ulongVal))
+                    writer.WriteNumberValue(ulongVal);
+                else if (element.TryGetDouble(out var doubleVal))
+                    writer.WriteNumberValue(doubleVal);
+                else
+                    writer.WriteRawValue(element.GetRawText(), skipInputValidation: true);
                 break;
 
             case JsonValueKind.True:

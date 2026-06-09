@@ -12,8 +12,7 @@ public static class QuickstartSample
         engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
         using var run = Epoch.QuickRun(state, rootDir: "artifacts");
-        engine.Attach(run);
-        engine.RunTicks(state, seed: 1, endTickInclusive: 100);
+        run.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
         return state.Population;
     }

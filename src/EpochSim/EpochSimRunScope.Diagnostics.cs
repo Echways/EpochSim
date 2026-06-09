@@ -6,6 +6,7 @@ public sealed partial class EpochSimRunScope<TState>
 
     internal partial EpochSimRunScope(RunScopeInit<TState> init)
     {
+        _state = init.State;
         _paths = init.Paths;
         _context = init.Context;
         _middleware = init.Middleware;

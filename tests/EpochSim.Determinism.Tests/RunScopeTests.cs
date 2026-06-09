@@ -1,5 +1,6 @@
 using EpochSim.Execution;
 using EpochSim;
+using EpochSim.Execution.RunArtifacts;
 using EpochSim.Kernel.Time;
 using EpochSim.Samples.Population;
 using EpochSim.Serialization.EventLog;
@@ -40,8 +41,7 @@ public sealed class RunScopeTests
                 .WithFailureArtifacts(serializer, codec, tailSize: 32)
                 .Build();
 
-            engine.Attach(run);
-            engine.RunTicks(state, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(5), context: run.Context);
+            run.RunTicks(engine, seed: 12345, start: SimTime.Zero, endInclusive: new SimTime(5));
 
             var paths = run.Paths;
             run.Dispose();
@@ -55,6 +55,68 @@ public sealed class RunScopeTests
             Assert.True(File.Exists(paths.MetaPath));
             Assert.True(Directory.Exists(paths.SnapshotsDir));
             Assert.NotEmpty(Directory.EnumerateFiles(paths.SnapshotsDir, "snapshot-*.json"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RunWith_WrongState_ThrowsWithWhyFix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-doublebind-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var correctState = new WorldState();
+            var wrongState = new WorldState();
+            var engine = new SimulationEngine<WorldState>();
+
+            using var run = EpochSimRun.For(correctState)
+                .WithRootDirectory(root)
+                .Build();
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                engine.RunWith(run, wrongState, seed: 1, SimTime.Zero, new SimTime(5)));
+
+            Assert.Contains("Why:", ex.Message);
+            Assert.Contains("Fix:", ex.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RunTicks_OnScope_AttachesAndRunsWithBoundState()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-scope-run-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var state = new WorldState();
+            var engine = new SimulationEngine<WorldState>();
+            engine.AddSystem(new PopulationSystem());
+            engine.RegisterCommandHandler(new GrowPopulationHandler());
+            engine.RegisterCommandHandler(new ScheduleFireHandler());
+
+            RunPaths paths;
+            using (var run = EpochSimRun.For(state)
+                .WithRootDirectory(root)
+                .Build())
+            {
+                Assert.Same(state, run.State);
+                paths = run.Paths;
+                run.RunTicks(engine, seed: 42, endTickInclusive: 10);
+            } // Dispose writes manifest
+
+            Assert.True(File.Exists(paths.ManifestPath));
         }
         finally
         {

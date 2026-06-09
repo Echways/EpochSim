@@ -267,6 +267,7 @@ public sealed class EpochSimRunBuilder<TState>
         var composite = new CompositeExecutionMiddleware(middleware);
 
         var init = new RunScopeInit<TState>(
+            State: _state,
             paths,
             context,
             composite,

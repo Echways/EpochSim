@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Text.Encodings.Web;
 
 namespace EpochSim.Serialization.EventLog;
 
@@ -36,31 +37,12 @@ public sealed class EventLogWriter : IDisposable
         _writer.Dispose();
     }
 
-    private void WriteEscaped(ReadOnlySpan<char> s)
+    // Encodes the string as a safe JSON string value using JavaScriptEncoder.Default, which
+    // correctly escapes all control characters < 0x20 (including \b, \f), embedded quotes,
+    // backslashes, and Unicode line/paragraph separators U+2028 and U+2029.
+    private void WriteEscaped(string s)
     {
-        foreach (var ch in s)
-        {
-            switch (ch)
-            {
-                case '"':
-                    _writer.Write("\\\"");
-                    break;
-                case '\\':
-                    _writer.Write("\\\\");
-                    break;
-                case '\n':
-                    _writer.Write("\\n");
-                    break;
-                case '\r':
-                    _writer.Write("\\r");
-                    break;
-                case '\t':
-                    _writer.Write("\\t");
-                    break;
-                default:
-                    _writer.Write(ch);
-                    break;
-            }
-        }
+        if (s.Length == 0) return;
+        JavaScriptEncoder.Default.Encode(_writer, s, 0, s.Length);
     }
 }

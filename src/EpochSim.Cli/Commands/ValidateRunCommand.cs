@@ -106,7 +106,6 @@ public sealed class ValidateRunCommand : DomainCommandBase
             runBuilder.WithStateMutationGuard(stateSerializer);
 
         using var run = runBuilder.Build();
-        run.AttachTo(engine);
 
         var dumper = new FailFastDumpMiddleware<TState>(
             state: simulationState,
@@ -129,13 +128,12 @@ public sealed class ValidateRunCommand : DomainCommandBase
             if (cancelAfterMsOpt.HasValue && cancelAfterMsOpt.Value > 0)
                 cancellation.CancelAfter(cancelAfterMsOpt.Value);
 
-            engine.RunTicks(
-                simulationState,
+            run.RunTicks(
+                engine,
                 seed: seed,
                 start: SimTime.Zero,
                 endInclusive: new SimTime(endTick),
                 options: options,
-                context: run.Context,
                 cancellationToken: cancellation.Token);
             Console.WriteLine($"RunDir={run.Paths.RunDir}");
             Console.WriteLine($"RunId={run.RunId}");

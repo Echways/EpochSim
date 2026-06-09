@@ -20,7 +20,17 @@ public static class SimulationEngineExtensions
             SimTime endInclusive,
             RunOptions? options = null,
             CancellationToken cancellationToken = default)
-            => engine.RunTicks(state, seed, start, endInclusive, options, run.Context, cancellationToken);
+        {
+            if (!ReferenceEquals(state, run.State))
+                throw new InvalidOperationException(
+                    "State mismatch detected between run scope and engine call. " +
+                    "Why: The run scope was built with a different state instance than the one passed here. " +
+                    "All middleware (snapshots, fingerprints, mutation guard) captures the scope's state, so " +
+                    "running the engine with a different object silently produces incorrect artifacts. " +
+                    "Fix: Use run.RunTicks(engine, seed, ...) which automatically uses the bound state, " +
+                    "or pass the exact same state reference the scope was built with.");
+            engine.RunTicks(state, seed, start, endInclusive, options, run.Context, cancellationToken);
+        }
     }
 
     extension<TState>(EpochSimRunScope<TState> run)
