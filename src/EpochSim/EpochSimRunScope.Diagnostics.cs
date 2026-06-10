@@ -18,6 +18,7 @@ public sealed partial class EpochSimRunScope<TState>
         _fingerprintEveryTicks = init.FingerprintEveryTicks;
         _hasEventLog = init.HasEventLog;
         _mode = init.Mode;
+        _domain = init.Domain;
 
         PublishDiagnostic($"Run scope created: RunId={_paths.RunId}.");
     }

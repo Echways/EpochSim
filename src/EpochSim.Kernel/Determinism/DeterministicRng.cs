@@ -1,5 +1,6 @@
 namespace EpochSim.Kernel.Determinism;
 
+// seed=0 causes an all-zero XorShift state (degenerate); substitute with a large odd constant.
 public sealed class DeterministicRng(ulong seed, RngVersion version = RngVersion.V2) : IRng
 {
     private ulong _state = seed != 0 ? seed : 0x9E3779B97F4A7C15UL;

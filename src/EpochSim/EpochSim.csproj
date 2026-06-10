@@ -10,6 +10,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>EpochSim</PackageId>
 
     <PackageDescription>Facade-first package for EpochSim: ergonomic entrypoints, quick presets, and minimal wiring for deterministic runs.</PackageDescription>

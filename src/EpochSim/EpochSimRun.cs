@@ -9,6 +9,7 @@ public static class EpochSimRun
     public static EpochSimRunBuilder<TState> For<TState>(TState state)
         => new(state);
 
+    // Preset: compression, snapshots/50, fingerprints/1, trace only — low overhead.
     public static EpochSimRunScope<TState> Quick<TState>(
         TState state,
         string? rootDir = null,

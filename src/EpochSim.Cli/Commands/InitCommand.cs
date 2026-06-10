@@ -58,7 +58,7 @@ public sealed class InitCommand : ICliCommand
           </PropertyGroup>
 
           <ItemGroup>
-            <PackageReference Include="EpochSim" Version="0.2.0" />
+            <PackageReference Include="EpochSim" Version="0.2.2" />
           </ItemGroup>
 
         </Project>
@@ -74,8 +74,7 @@ public sealed class InitCommand : ICliCommand
 
         using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 
-        engine.Attach(run);
-        engine.RunTicks(state, seed: 1, endTickInclusive: 100);
+        run.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
         Console.WriteLine($"RunId={run.RunId}");
         Console.WriteLine($"RunDir={run.Paths.RunDir}");

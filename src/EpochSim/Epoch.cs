@@ -14,6 +14,7 @@ public static class Epoch
     public static JsonStateSerializer<TState> JsonStateSerializer<TState>()
         => new();
 
+    // Scans the assembly containing TMarker for all IEvent implementations and builds a JSON codec.
     public static IEventCodecV2 JsonCodecFromAssembly<TMarker>(
         Func<Type, bool>? filter = null,
         bool strictUnknownKinds = true)

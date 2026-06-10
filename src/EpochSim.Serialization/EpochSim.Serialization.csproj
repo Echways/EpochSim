@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageDescription>Event log, snapshot, and state fingerprint serialization for EpochSim (JSONL v2).</PackageDescription>
     <PackageTags>epochsim;deterministic;simulation;serialization;event-log;jsonl;snapshots;fingerprints</PackageTags>
     <Authors>Echways</Authors>

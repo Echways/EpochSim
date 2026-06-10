@@ -50,6 +50,18 @@ public sealed class RngTests
     }
 
     [Fact]
+    public void Seed0_SubstitutedWith_GoldenRatioConstant_SameAsExplicitConstant()
+    {
+        // Pins the seed=0 substitution invariant — any future change to the constant breaks this test.
+        const ulong goldenRatio = 0x9E3779B97F4A7C15UL;
+        var rng0 = new DeterministicRng(0);
+        var rngGolden = new DeterministicRng(goldenRatio);
+
+        for (int i = 0; i < 20; i++)
+            Assert.Equal(rngGolden.NextU64(), rng0.NextU64());
+    }
+
+    [Fact]
     public void Seed0_ProducesNonDegenerateSequence()
     {
         var rng = new DeterministicRng(0);

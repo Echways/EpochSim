@@ -20,20 +20,20 @@ public sealed class ValidateRunCommand : DomainCommandBase
         """
         validate-run <artifactsRoot> [runId] [--end-tick N] [--seed N] [--guard-state] [--compress]
             [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]
-            [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]
+            [--max-event-dispatches-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]
 
         Run the simulation with invariant checking and write artifacts to <artifactsRoot>.
 
-          --end-tick N           Last tick to simulate (default: 500)
-          --seed N               RNG seed (default: 12345)
-          --guard-state          Enable mutation guard (throws if system mutates state during tick)
-          --compress             Write gzip-compressed event log
-          --snapshot-every N     Snapshot state every N ticks (default: 50)
-          --fingerprint-every N  Record fingerprint every N ticks (default: 1)
-          --max-pump-steps N     Max pump iterations per tick
-          --max-events-per-tick N  Max events dispatched per tick
-          --rng-version v1|v2    RNG algorithm version (default: v2)
-          --cancel-after-ms N    Abort after N milliseconds
+          --end-tick N                       Last tick to simulate (default: 500)
+          --seed N                           RNG seed (default: 12345)
+          --guard-state                      Enable mutation guard
+          --compress                         Write gzip-compressed event log
+          --snapshot-every N                 Snapshot state every N ticks (default: 50)
+          --fingerprint-every N              Record fingerprint every N ticks (default: 1)
+          --max-pump-steps N                 Max pump iterations per tick
+          --max-event-dispatches-per-tick N  Max event dispatches per tick
+          --rng-version v1|v2                RNG algorithm version (default: v2)
+          --cancel-after-ms N                Abort after N milliseconds
         """;
 
     protected override int Execute<TState>(IDomainAdapter<TState> adapter, CommandContext ctx, string[] args)
@@ -82,7 +82,8 @@ public sealed class ValidateRunCommand : DomainCommandBase
                 case "--max-pump-steps":
                     if (TryReadInt(args, ref i, out var maxPumpSteps)) maxPumpStepsOpt = maxPumpSteps;
                     break;
-                case "--max-events-per-tick":
+                case "--max-event-dispatches-per-tick":
+                case "--max-events-per-tick": // backward-compat alias
                     if (TryReadInt(args, ref i, out var maxEvents)) maxEventsOpt = maxEvents;
                     break;
                 case "--cancel-after-ms":
@@ -95,9 +96,9 @@ public sealed class ValidateRunCommand : DomainCommandBase
         }
 
         var runArg = positional.Count > 0 ? positional[0] : "";
-        var endTick = endTickOpt ?? (positional.Count > 1 && CliParsing.TryParseLong(positional[1], out var et) ? et : 500);
-        var snapEvery = snapshotEveryOpt ?? (positional.Count > 2 && CliParsing.TryParseLong(positional[2], out var se) ? se : 50);
-        var seed = seedOpt ?? (positional.Count > 3 && CliParsing.TryParseUlong(positional[3], out var sd) ? sd : 12345UL);
+        var endTick = endTickOpt ?? 500;
+        var snapEvery = snapshotEveryOpt ?? 50;
+        var seed = seedOpt ?? 12345UL;
         var fingerprintEvery = fingerprintEveryOpt ?? 1;
         if (fingerprintEvery <= 0) fingerprintEvery = 1;
 
@@ -121,6 +122,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
         var runBuilder = EpochSimRun.For(simulationState)
             .WithRootDirectory(ctx.Root)
             .WithRunId(runId)
+            .WithDomain(adapter.Name)
             .WithCompression(compress)
             .WithEventLog(codec)
             .WithStateFingerprints(stateSerializer, fingerprintEvery)
@@ -146,7 +148,7 @@ public sealed class ValidateRunCommand : DomainCommandBase
         var options = new RunOptions
         {
             MaxPumpStepsPerTick = maxPumpStepsOpt ?? defaultOptions.MaxPumpStepsPerTick,
-            MaxEventsPerTick = maxEventsOpt ?? defaultOptions.MaxEventsPerTick,
+            MaxEventDispatchesPerTick = maxEventsOpt ?? defaultOptions.MaxEventDispatchesPerTick,
             RngVersion = rngVersionOpt ?? defaultOptions.RngVersion
         };
 

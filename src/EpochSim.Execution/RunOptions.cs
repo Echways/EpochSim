@@ -4,6 +4,7 @@ namespace EpochSim.Execution;
 
 public sealed class RunOptions
 {
+    // Prevents infinite command/event chains from locking the engine.
     public int MaxPumpStepsPerTick
     {
         get;
@@ -16,23 +17,26 @@ public sealed class RunOptions
         }
     } = 1024;
 
-    public int MaxEventsPerTick
+    // Prevents explosive event fan-out. Hard engine-level cap (distinct from domain invariants).
+    public int MaxEventDispatchesPerTick
     {
         get;
         init
         {
             if (value <= 0)
-                throw new InvalidOperationException($"MaxEventsPerTick must be > 0 (value={value}).");
+                throw new InvalidOperationException($"MaxEventDispatchesPerTick must be > 0 (value={value}).");
 
             field = value;
         }
     } = 100_000;
 
-    public RngVersion RngVersion { get; init; } = RngVersion.V2;
-
-    public void Validate()
+    [Obsolete("Use MaxEventDispatchesPerTick instead.")]
+    public int MaxEventsPerTick
     {
-        _ = MaxPumpStepsPerTick;
-        _ = MaxEventsPerTick;
+        get => MaxEventDispatchesPerTick;
+        init => MaxEventDispatchesPerTick = value;
     }
+
+    // V1 kept for backward compatibility with older runs.
+    public RngVersion RngVersion { get; init; } = RngVersion.V2;
 }

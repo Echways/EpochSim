@@ -21,6 +21,7 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
     private readonly bool _hasEventLog;
     private readonly RunMode _mode;
 
+    private readonly string? _domain;
     private bool _attached;
     private bool _disposed;
 
@@ -41,6 +42,7 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
             throw new InvalidOperationException("This run scope is already attached to an engine.");
 
         engine.AddMiddleware(_middleware);
+        engine.BindScopeState(_state);
         _attached = true;
         PublishDiagnostic($"Run scope attached to {engine.GetType().Name}.");
     }
@@ -137,9 +139,10 @@ public sealed partial class EpochSimRunScope<TState> : IDisposable
             SnapshotEvery: _snapshotEveryTicks,
             FingerprintEvery: _fingerprintEveryTicks,
             MaxPumpStepsPerTick: options.MaxPumpStepsPerTick,
-            MaxEventsPerTick: options.MaxEventsPerTick,
+            MaxEventsPerTick: options.MaxEventDispatchesPerTick,
             StrictReplay: info?.StrictReplay ?? false,
-            BuildTimestampUtc: DateTime.UtcNow);
+            BuildTimestampUtc: DateTime.UtcNow,
+            Domain: _domain);
 
         RunManifestWriter.Write(_paths.ManifestPath, manifest);
     }

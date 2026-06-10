@@ -15,6 +15,33 @@ public sealed class SimulationEngine<TState>
     private readonly List<IExecutionMiddleware> _middleware = new();
     private readonly CommandRouter<TState> _commandRouter = new();
 
+    // Remembers the scope's state so mismatched RunTicks calls (different instance) can be caught early.
+    // Only meaningful for reference-type TState; value types are skipped.
+    private object? _boundScopeState;
+
+    // Reuse cached delegates across ticks to avoid per-tick lambda allocations on the hot path.
+    private SimTime _pumpTime;
+    private Action<string, ICommand>? _cachedCommandStart;
+    private Action<string, ICommand>? _cachedCommandEnd;
+
+    internal void BindScopeState(TState state)
+    {
+        if (!typeof(TState).IsValueType)
+            _boundScopeState = state;
+    }
+
+    private void ThrowIfStateMismatch(TState state)
+    {
+        if (_boundScopeState is not null && !ReferenceEquals(state, _boundScopeState))
+            throw new InvalidOperationException(
+                "State mismatch: a run scope is attached to this engine but RunTicks/CreateSession " +
+                "was called with a different state instance. " +
+                "All middleware (snapshots, fingerprints, mutation guard) was bound to the scope's state, " +
+                "so running with a different object would silently produce incorrect artifacts. " +
+                "Fix: use run.RunTicks(engine, seed, ...) which automatically supplies the scope's state, " +
+                "or ensure you pass the exact same state reference the scope was created with.");
+    }
+
     internal IReadOnlyList<ISystem<TState>> Systems => _systems;
     internal IReadOnlyList<IExecutionMiddleware> Middleware => _middleware;
     internal CommandRouter<TState> CommandRouter => _commandRouter;
@@ -49,7 +76,9 @@ public sealed class SimulationEngine<TState>
         ulong seed,
         long endTickInclusive,
         CancellationToken cancellationToken = default)
-        => RunTicks(
+    {
+        ThrowIfStateMismatch(state);
+        RunTicks(
             state,
             seed,
             start: SimTime.Zero,
@@ -57,6 +86,7 @@ public sealed class SimulationEngine<TState>
             options: null,
             context: null,
             cancellationToken);
+    }
 
     public void RunTicks(
         TState state,
@@ -64,7 +94,9 @@ public sealed class SimulationEngine<TState>
         long startTick,
         long endTickInclusive,
         CancellationToken cancellationToken = default)
-        => RunTicks(
+    {
+        ThrowIfStateMismatch(state);
+        RunTicks(
             state,
             seed,
             start: new SimTime(startTick),
@@ -72,6 +104,7 @@ public sealed class SimulationEngine<TState>
             options: null,
             context: null,
             cancellationToken);
+    }
 
     public void RunTicks(
         TState state,
@@ -82,6 +115,7 @@ public sealed class SimulationEngine<TState>
         RunContext? context = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfStateMismatch(state);
         using var session = CreateSession(state, seed, start, endInclusive, options, context);
         session.RunUntil(endInclusive, cancellationToken);
     }
@@ -92,7 +126,10 @@ public sealed class SimulationEngine<TState>
         long startTick = 0,
         RunOptions? options = null,
         RunContext? context = null)
-        => CreateSession(state, seed, new SimTime(startTick), options, context);
+    {
+        ThrowIfStateMismatch(state);
+        return CreateSession(state, seed, new SimTime(startTick), options, context);
+    }
 
     public SimulationSession<TState> CreateSession(
         TState state,
@@ -100,7 +137,10 @@ public sealed class SimulationEngine<TState>
         SimTime start,
         RunOptions? options = null,
         RunContext? context = null)
-        => CreateSession(state, seed, start, plannedEndInclusive: null, options, context);
+    {
+        ThrowIfStateMismatch(state);
+        return CreateSession(state, seed, start, plannedEndInclusive: null, options, context);
+    }
 
     internal SimulationSession<TState> CreateSession(
         TState state,
@@ -111,7 +151,6 @@ public sealed class SimulationEngine<TState>
         RunContext? context = null)
     {
         options ??= new RunOptions();
-        options.Validate();
         return new SimulationSession<TState>(this, state, seed, start, plannedEndInclusive, options, context);
     }
 
@@ -128,7 +167,6 @@ public sealed class SimulationEngine<TState>
         CancellationToken cancellationToken = default)
     {
         options ??= new RunOptions();
-        options.Validate();
         var runInfo = BuildReplayRunInfo(seed, start, endInclusive, context, options, strictReplay);
         RunReplayLoop(state, start, endInclusive, codec, runInfo,
             new DeterministicRng(seed, options.RngVersion), strictReplay,
@@ -162,7 +200,6 @@ public sealed class SimulationEngine<TState>
         CancellationToken cancellationToken = default)
     {
         options ??= new RunOptions();
-        options.Validate();
         var runInfo = BuildReplayRunInfo(seed, start, endInclusive, context, options, strictReplay);
 
         using var enumerator = entries.GetEnumerator();
@@ -341,6 +378,10 @@ public sealed class SimulationEngine<TState>
         var pumpSteps = 0;
         var eventsDispatched = 0;
 
+        _pumpTime = time;
+        _cachedCommandStart ??= (name, cmd) => NotifyCommandHandlerStart(_pumpTime, name, cmd);
+        _cachedCommandEnd ??= (name, cmd) => NotifyCommandHandlerEnd(_pumpTime, name, cmd);
+
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -358,8 +399,8 @@ public sealed class SimulationEngine<TState>
                     state,
                     drainedCommands,
                     events,
-                    before: (name, cmd) => NotifyCommandHandlerStart(time, name, cmd),
-                    after: (name, cmd) => NotifyCommandHandlerEnd(time, name, cmd));
+                    before: _cachedCommandStart,
+                    after: _cachedCommandEnd);
                 if (drainedCommands is List<ICommand> commandList)
                     commandList.Clear();
             }
@@ -374,9 +415,9 @@ public sealed class SimulationEngine<TState>
                 {
                     NotifyEventDispatched(time, ev);
                     eventsDispatched++;
-                    if (eventsDispatched > options.MaxEventsPerTick)
+                    if (eventsDispatched > options.MaxEventDispatchesPerTick)
                         throw new InvalidOperationException(
-                            $"Tick {time.Tick} exceeded MaxEventsPerTick={options.MaxEventsPerTick} (eventsDispatched={eventsDispatched}, pumpSteps={pumpSteps}).");
+                            $"Tick {time.Tick} exceeded MaxEventDispatchesPerTick={options.MaxEventDispatchesPerTick} (eventsDispatched={eventsDispatched}, pumpSteps={pumpSteps}).");
 
                     DispatchToSystems(evtCtxNow, ev);
                 }

@@ -64,6 +64,65 @@ public sealed class RunScopeTests
     }
 
     [Fact]
+    public void DirectRunTicks_AfterAttach_WithWrongState_Throws()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-guard-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var correctState = new WorldState();
+            var wrongState = new WorldState();
+            var engine = new SimulationEngine<WorldState>();
+
+            using var run = EpochSimRun.For(correctState)
+                .WithRootDirectory(root)
+                .Build();
+
+            engine.Attach(run);
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                engine.RunTicks(wrongState, seed: 1, endTickInclusive: 5));
+
+            Assert.Contains("run.RunTicks(engine", ex.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DirectRunTicks_AfterAttach_WithCorrectState_Succeeds()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"epochsim-guard-ok-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var state = new WorldState();
+            var engine = new SimulationEngine<WorldState>();
+            engine.AddSystem(new PopulationSystem());
+            engine.RegisterCommandHandler(new GrowPopulationHandler());
+            engine.RegisterCommandHandler(new ScheduleFireHandler());
+
+            using var run = EpochSimRun.For(state)
+                .WithRootDirectory(root)
+                .Build();
+
+            engine.Attach(run);
+
+            engine.RunTicks(state, seed: 1, endTickInclusive: 5); // same reference — must not throw
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RunWith_WrongState_ThrowsWithWhyFix()
     {
         var root = Path.Combine(Path.GetTempPath(), $"epochsim-doublebind-{Guid.NewGuid():N}");

@@ -3,6 +3,7 @@ using EpochSim.Kernel.Time;
 
 namespace EpochSim;
 
+// Thread-safe FIFO inbox for injecting commands into a running simulation session.
 public sealed class CommandInbox
 {
     private readonly object _gate = new();
@@ -58,6 +59,7 @@ public sealed class CommandInbox
     }
 }
 
+// Thread-safe priority-queue inbox for injecting commands at specific future ticks.
 public sealed class ScheduledCommandInbox
 {
     private readonly object _gate = new();

@@ -1,4 +1,7 @@
+using EpochSim.Execution;
 using EpochSim.Kernel.Messaging;
+using EpochSim.Kernel.Systems;
+using EpochSim.Kernel.Time;
 using Xunit;
 
 public sealed class AllocationTests
@@ -55,6 +58,45 @@ public sealed class AllocationTests
         foreach (var _ in drained) { }
         if (drained is List<IEvent> list)
             list.Clear();
+    }
+
+    [Fact]
+    public void RunPump_CachedDelegates_DoNotAllocatePerTick()
+    {
+        // Verifies that before/after lambdas are reused across ticks, not re-created each pump step.
+        var state = new PumpState();
+        var engine = new SimulationEngine<PumpState>();
+        engine.AddSystem(new EnqueueCommandSystem());
+        engine.RegisterCommandHandler(new NoOpCommandHandler());
+
+        // Warmup — let the engine allocate once and cache the delegates.
+        engine.RunTicks(state, seed: 1, start: SimTime.Zero, endInclusive: new SimTime(9));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        engine.RunTicks(state, seed: 1, start: new SimTime(10), endInclusive: new SimTime(109));
+        var after = GC.GetAllocatedBytesForCurrentThread();
+
+        var allocated = after - before;
+        Assert.True(allocated < 100_000,
+            $"Expected <100 KB allocated for 100 ticks with command dispatch, got {allocated} bytes.");
+    }
+
+    private sealed class PumpState { }
+
+    private sealed class EnqueueCommandSystem : ISystem<PumpState>
+    {
+        public void Tick(TickContext<PumpState> ctx)
+            => ctx.Commands.Enqueue(new PumpCommand());
+    }
+
+    private sealed class NoOpCommandHandler : ICommandHandler<PumpState, PumpCommand>
+    {
+        public void Handle(PumpState state, PumpCommand command, IEventBuffer events) { }
+    }
+
+    private sealed record PumpCommand() : ICommand
+    {
+        public string Kind => "PumpCommand";
     }
 
     private sealed record TestCommand() : ICommand

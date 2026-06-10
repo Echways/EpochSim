@@ -13,4 +13,5 @@ public sealed record RunManifest(
     int MaxPumpStepsPerTick,
     int MaxEventsPerTick,
     bool StrictReplay,
-    DateTime BuildTimestampUtc);
+    DateTime BuildTimestampUtc,
+    string? Domain = null);

@@ -54,6 +54,7 @@ public sealed class FastReplayCommand : DomainCommandBase
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = CliParsing.Paths(ctx.Root, runId);
+        if (!CheckDomain(adapter, paths.RunDir)) return 1;
         var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
         var endTick = endTickOpt

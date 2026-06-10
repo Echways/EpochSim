@@ -25,6 +25,7 @@ public sealed class ReproCommand : DomainCommandBase
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = new RunPaths(ctx.Root, runId);
+        if (!CheckDomain(adapter, paths.RunDir)) return 1;
         var manifest = RunManifestReader.TryRead(paths.ManifestPath);
 
         var minRoot = Path.Combine(paths.RunDir, "minrepro");

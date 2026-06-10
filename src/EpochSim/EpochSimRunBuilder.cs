@@ -23,6 +23,7 @@ public sealed class EpochSimRunBuilder<TState>
 
     private readonly TState _state;
     private EpochSimRunOptions _runOptions = new();
+    private string? _domain;
 
     private IEventCodecV2? _eventCodec;
 
@@ -63,6 +64,12 @@ public sealed class EpochSimRunBuilder<TState>
     {
         ArgumentNullException.ThrowIfNull(runIdFactory);
         _runOptions = CloneRunOptions(runId: runIdFactory());
+        return this;
+    }
+
+    public EpochSimRunBuilder<TState> WithDomain(string? domain)
+    {
+        _domain = domain;
         return this;
     }
 
@@ -343,7 +350,8 @@ public sealed class EpochSimRunBuilder<TState>
             _snapshotOptions?.EveryTicks ?? 0,
             _fingerprintOptions?.EveryTicks ?? 0,
             HasEventLog: _eventCodec is not null,
-            Mode: RunMode.Run);
+            Mode: RunMode.Run,
+            Domain: _domain);
 
         return new EpochSimRunScope<TState>(init);
     }

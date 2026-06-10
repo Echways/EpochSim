@@ -58,6 +58,7 @@ public sealed class VerifyRunCommand : DomainCommandBase
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = CliParsing.Paths(ctx.Root, runId);
+        if (!CheckDomain(adapter, paths.RunDir)) return 1;
 
         if (!File.Exists(paths.StateFpPath))
             throw new FileNotFoundException($"statefp.jsonl not found: {paths.StateFpPath}");

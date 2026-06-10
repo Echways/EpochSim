@@ -27,7 +27,8 @@ public sealed class CliApp
             ["list-runs"] = new ListRunsCommand(),
             ["inspect-run"] = new InspectRunCommand(),
             ["bisect"] = new BisectCommand(),
-            ["repro"] = new ReproCommand()
+            ["repro"] = new ReproCommand(),
+            ["list-adapters"] = new ListAdaptersCommand()
         };
     }
 
@@ -84,21 +85,22 @@ public sealed class CliApp
     {
         Console.WriteLine("Usage:");
         Console.WriteLine("  init [targetDir]");
-        Console.WriteLine("  run <artifactsRoot> [runId] --end-tick N --seed N [--guard-state] [--compress]");
+        Console.WriteLine("  run <artifactsRoot> [runId] [--end-tick N] [--seed N] [--guard-state] [--compress]");
         Console.WriteLine("      [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]");
-        Console.WriteLine("      [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
-        Console.WriteLine("  validate-run <artifactsRoot> [runId] --end-tick N --seed N [--guard-state] [--compress]");
+        Console.WriteLine("      [--max-event-dispatches-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
+        Console.WriteLine("  validate-run <artifactsRoot> [runId] [--end-tick N] [--seed N] [--guard-state] [--compress]");
         Console.WriteLine("      [--fingerprint-every N] [--snapshot-every N] [--max-pump-steps N]");
-        Console.WriteLine("      [--max-events-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
+        Console.WriteLine("      [--max-event-dispatches-per-tick N] [--rng-version v1|v2] [--cancel-after-ms N]");
         Console.WriteLine("  fast-replay <artifactsRoot> [runId] [--end-tick N] [--seed N]");
         Console.WriteLine("  verify-run <artifactsRoot> [runId] [--end-tick N] [--seed N]");
         Console.WriteLine("  bisect <artifactsRoot> [runId] [--end-tick N] [--seed N]");
-        Console.WriteLine("  event-stats <artifactsRoot> [runId?] [topN?] [fromTick?] [toTick?] [--only K|--kind K]...");
-        Console.WriteLine("  timeline <artifactsRoot> [runId?] [fromTick?] [toTick?] [maxPerTick?] [maxPayloadChars?] [--only K|--kind K]...");
-        Console.WriteLine("  pretty-inspect <artifactsRoot> [runIdOrRunDirOrEmptyForLatest]");
+        Console.WriteLine("  event-stats <artifactsRoot> [runId] [topN] [fromTick] [toTick] [--kind K]...");
+        Console.WriteLine("  timeline <artifactsRoot> [runId] [fromTick] [toTick] [maxPerTick] [maxPayloadChars] [--kind K]...");
+        Console.WriteLine("  pretty-inspect <artifactsRoot> [runId]");
         Console.WriteLine("  list-runs <artifactsRoot> [limit]");
-        Console.WriteLine("  inspect-run <artifactsRoot> <runIdOrRunDir>");
-        Console.WriteLine("  repro <artifactsRoot> [runIdOrEmptyForLatestWithEvents] [failureTickOrEmptyForLatest] [seedOverride]");
+        Console.WriteLine("  inspect-run <artifactsRoot> <runId>");
+        Console.WriteLine("  repro <artifactsRoot> [runId] [failureTick] [seedOverride]");
+        Console.WriteLine("  list-adapters");
         Console.WriteLine();
         Console.WriteLine("Pass --help to any command for detailed usage.");
     }

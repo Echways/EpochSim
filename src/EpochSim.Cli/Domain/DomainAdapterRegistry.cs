@@ -10,6 +10,12 @@ public static class DomainAdapterRegistry
 
     public static IDomainAdapter Default => Adapters["population"];
 
+    public static void Register(IDomainAdapter adapter)
+    {
+        ArgumentNullException.ThrowIfNull(adapter);
+        Adapters[adapter.Name] = adapter;
+    }
+
     public static IDomainAdapter Resolve(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -18,7 +24,10 @@ public static class DomainAdapterRegistry
         if (Adapters.TryGetValue(name.Trim(), out var adapter))
             return adapter;
 
-        throw new InvalidOperationException($"Unknown domain adapter: {name}");
+        var known = string.Join(", ", Adapters.Keys);
+        throw new InvalidOperationException(
+            $"Unknown domain adapter '{name}'. Known adapters: {known}. " +
+            "Run 'list-adapters' to see all registered adapters.");
     }
 
     public static IEnumerable<string> Names => Adapters.Keys;

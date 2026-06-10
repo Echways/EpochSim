@@ -13,6 +13,7 @@ public sealed class StateFingerprintMiddleware<TState>(
     public void OnTickEnd(SimTime time)
     {
         if (intervalTicks <= 0) return;
+        if (time.Tick == 0) return; // tick 0 has no event-log entry to replay against
         if (time.Tick % intervalTicks != 0) return;
 
         var json = serializer.Serialize(state);

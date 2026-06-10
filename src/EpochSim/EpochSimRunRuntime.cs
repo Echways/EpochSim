@@ -18,7 +18,8 @@ internal sealed record RunScopeInit<TState>(
     long SnapshotEveryTicks,
     long FingerprintEveryTicks,
     bool HasEventLog,
-    RunMode Mode);
+    RunMode Mode,
+    string? Domain = null);
 
 internal sealed class TraceRuntime(InMemoryTraceSink sink, JsonlTraceWriter writer)
 {

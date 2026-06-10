@@ -7,13 +7,26 @@ public static class EventLogReader
         using var stream = OpenRead(path);
         using var reader = new StreamReader(stream);
 
+        var lineNumber = 0;
         while (true)
         {
             var line = reader.ReadLine();
+            lineNumber++;
             if (line is null) yield break;
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            yield return EventLogLine.ReadEntry(line);
+            EventLogEntryV2 entry;
+            try
+            {
+                entry = EventLogLine.ReadEntry(line);
+            }
+            catch (Exception ex) when (ex is FormatException or System.Text.Json.JsonException)
+            {
+                var fragment = line.Length > 80 ? line[..80] + "…" : line;
+                throw new FormatException(
+                    $"Line {lineNumber}: {ex.Message} — content: {fragment}", ex);
+            }
+            yield return entry;
         }
     }
 

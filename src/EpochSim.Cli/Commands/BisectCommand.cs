@@ -58,6 +58,7 @@ public sealed class BisectCommand : DomainCommandBase
 
         var runId = CliParsing.ResolveRunIdWithEvents(ctx.Root, runArg);
         var paths = new RunPaths(ctx.Root, runId);
+        if (!CheckDomain(adapter, paths.RunDir)) return 1;
 
         if (!Directory.Exists(paths.RunDir))
             throw new DirectoryNotFoundException($"RunDir not found: {paths.RunDir}");

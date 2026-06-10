@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageDescription>Tracing and profiling helpers for EpochSim runs, including JSONL trace/profile writers and fingerprints.</PackageDescription>
     <PackageTags>epochsim;deterministic;simulation;observability;tracing;profiling;timeline;jsonl</PackageTags>
     <Authors>Echways</Authors>

@@ -21,6 +21,11 @@ public sealed class CliInitCommandTests
 
             var program = File.ReadAllText(Path.Combine(targetDir, "Program.cs"));
             Assert.Contains("Epoch.QuickRun", program, StringComparison.Ordinal);
+            Assert.Contains("run.RunTicks(engine", program, StringComparison.Ordinal);
+            Assert.DoesNotContain("engine.RunTicks(state", program, StringComparison.Ordinal);
+
+            var csproj = File.ReadAllText(Path.Combine(targetDir, "EpochSim.App.csproj"));
+            Assert.Contains("Version=\"0.2.1\"", csproj, StringComparison.Ordinal);
 
             var inboxExample = File.ReadAllText(Path.Combine(targetDir, "SessionInboxExample.cs"));
             Assert.Contains("CommandInbox", inboxExample, StringComparison.Ordinal);
