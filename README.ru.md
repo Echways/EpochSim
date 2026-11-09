@@ -1,22 +1,49 @@
+<div align="center">
+
 # EpochSim
 
-Детерминированный движок тиковых симуляций для .NET 10.
+**Детерминированный движок тиковых симуляций для .NET 10.**
+Запускайте симуляцию по seed, записывайте fingerprint'ы и события, затем проверяйте, воспроизводите и бисектите любой прогон.
 
-Рекомендуемый пакет для встраивания:
+[English](README.md) · **Русский**
+
+[![NuGet](https://img.shields.io/nuget/v/EpochSim)](https://www.nuget.org/packages/EpochSim)
+[![CI](https://github.com/Echways/EpochSim/actions/workflows/ci.yml/badge.svg)](https://github.com/Echways/EpochSim/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+</div>
+
+## Зачем нужен EpochSim
+
+Симуляцию, которую нельзя воспроизвести, нельзя отладить. EpochSim фиксирует входы каждого тика: один и тот же seed и те же команды всегда дают то же состояние, а расхождение локализуется до одного тика.
+
+- **Детерминизм по построению.** Прогон определяется состоянием, seed и упорядоченным входом. Системы выполняются в фиксированном порядке в одном потоке симуляции.
+- **Пресеты запуска.** `QuickRun`, `RecommendedRun` и `DebugRun` закрывают smoke-тесты, диагностику в production и строгий поиск нарушений инвариантов одним вызовом.
+- **Артефакты каждого прогона.** Манифест, fingerprint'ы состояния по тикам и необязательный лог событий пишутся на диск и читаются из кода.
+- **Replay и bisect.** Проверка прогона по записанным fingerprint'ам и поиск первого тика, на котором два прогона расходятся.
+- **Детерминированный ввод.** `CommandInbox` и `ScheduledCommandInbox` передают команды из HTTP, UI или очередей в стабильном порядке.
+- **Долгоживущие сессии.** `SimulationSession<TState>` для игр, серверов и пошагового режима.
+- **CLI для всего процесса.** Запуск, список, инспекция, валидация, replay, bisect и воспроизведение прогонов из терминала.
+
+## Установка
 
 ```bash
 dotnet add package EpochSim
 ```
 
-`EpochSim.All` полезен, когда нужен полный граф модулей одной зависимостью:
+Требуется .NET 10. `EpochSim.All` приносит весь граф модулей (`EpochSim`, `Execution`, `Serialization`, `Observability`, `Kernel`) одной зависимостью:
 
 ```bash
 dotnet add package EpochSim.All
 ```
 
-English version: [README.md](README.md)
+Утилита командной строки ставится отдельно:
 
-## Быстрый старт только со State (без Event/Codec)
+```bash
+dotnet tool install --global EpochSim.Cli
+```
+
+## Быстрый старт
 
 ```csharp
 using EpochSim;
@@ -36,46 +63,37 @@ public sealed class WorldState
 }
 ```
 
-> **Важно**: всегда вызывайте `run.RunTicks(engine, ...)`, а не `engine.RunTicks(state, ...)` —
-> иначе можно передать другой экземпляр state, чем тот, с которым был создан run scope.
+Всегда вызывайте `run.RunTicks(engine, ...)`, а не `engine.RunTicks(state, ...)`: так передаётся тот же state, с которым создан run scope.
 
-Это самый быстрый путь: полезные артефакты и детерминированный запуск почти без обвязки.
+Подробнее в [Embedding](docs/ru/embedding.md).
 
-## Таблица стоимости пресетов
+## Пресеты запуска
 
-| Пресет | Каденция fingerprint | Mutation guard | Когда использовать |
-|---|---|---|---|
-| `QuickRun` | каждый тик | ✗ | Первый запуск, CI smoke |
-| `RecommendedRun` | каждые 50 тиков | ✗ | Production-отладка |
-| `DebugRun` | каждый тик | ✓ | Поиск инвариантов, строгий режим |
+| Пресет           | Каденция fingerprint | Mutation guard | Когда использовать                |
+| ---------------- | -------------------- | -------------- | --------------------------------- |
+| `QuickRun`       | каждый тик           | Нет            | Первый запуск, CI smoke           |
+| `RecommendedRun` | каждые 50 тиков      | Нет            | Диагностика в production          |
+| `DebugRun`       | каждый тик           | Да             | Поиск инвариантов, строгий режим  |
 
-**Mutation guard** сериализует state до и после каждого тика системы и бросает
-`InvalidOperationException` при изменении fingerprint. Полезен для нахождения систем,
-мутирующих state вне event handlers, но имеет значительный overhead по сериализации —
-используйте только в `DebugRun`.
+Mutation guard сериализует state до и после каждой системы и бросает `InvalidOperationException`, если fingerprint изменился. Он находит системы, меняющие state вне обработчиков событий, но заметно замедляет прогон: используйте его только в `DebugRun`.
 
 ```csharp
-// QuickRun — без конфигурации, кодек не нужен
-using var run = Epoch.QuickRun(state, rootDir: "artifacts");
-run.RunTicks(engine, seed: 1, endTickInclusive: 100);
+using var quick = Epoch.QuickRun(state, rootDir: "artifacts");
+quick.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
-// RecommendedRun — добавляет profiling + failure artifacts
-using var run = Epoch.RecommendedRun(state, rootDir: "artifacts");
-run.RunTicks(engine, seed: 1, endTickInclusive: 1000);
+using var recommended = Epoch.RecommendedRun(state, rootDir: "artifacts");
+recommended.RunTicks(engine, seed: 1, endTickInclusive: 1000);
 
-// DebugRun — fingerprint каждый тик + mutation guard
 var serializer = Epoch.JsonStateSerializer<WorldState>();
-using var run = Epoch.DebugRun(state, serializer, rootDir: "artifacts");
-run.RunTicks(engine, seed: 1, endTickInclusive: 200);
+using var debug = Epoch.DebugRun(state, serializer, rootDir: "artifacts");
+debug.RunTicks(engine, seed: 1, endTickInclusive: 200);
 ```
 
-Продвинутые варианты:
-- `Epoch.RecommendedRun(state, codec, serializer, rootDir, invariants)`
-- `EpochSimRun.For(state)...Build()`
+Для полного контроля: `Epoch.RecommendedRun(state, codec, serializer, rootDir, invariants)` или `EpochSimRun.For(state)...Build()`.
 
-## Event log / Replay (когда действительно нужно)
+## Лог событий и replay
 
-Event log нужен для replay/bisect (`verify-run`, `bisect`, `fast-replay`):
+Лог событий необязателен и нужен для `verify-run`, `bisect` и `fast-replay`.
 
 ```csharp
 using EpochSim;
@@ -85,29 +103,20 @@ var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Changed));
 var serializer = Epoch.JsonStateSerializer<WorldState>();
 
 using var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts");
-```
 
-```csharp
 [MessageKind("Changed")]
 public sealed record Changed(int Delta) : IEvent;
 ```
 
-## Чтение артефактов из кода
+## Чтение артефактов
 
-После завершения прогона артефакты можно читать непосредственно из кода, без CLI:
+Артефакты лежат обычными файлами в каталоге прогона и читаются из кода:
 
 ```csharp
 using EpochSim;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.StateFingerprint;
 using EpochSim.Serialization.EventLog;
-using EpochSim.Serialization.State;
-
-var state = new WorldState();
-var serializer = Epoch.JsonStateSerializer<WorldState>();
-var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Changed));
-var engine = Epoch.CreateEngine<WorldState>();
-engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
 string runDir;
 using (var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts"))
@@ -116,28 +125,18 @@ using (var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifa
     runDir = run.Paths.RunDir;
 }
 
-// Читаем манифест, записанный при Dispose()
 var manifest = RunManifestReader.TryRead(Path.Combine(runDir, "manifest.json"));
-Console.WriteLine($"EndTick={manifest?.EndTick}");
-
-// Читаем per-tick fingerprints
 var fingerprints = JsonlStateFingerprintWriter.ReadAll(Path.Combine(runDir, "statefp.jsonl"));
-Console.WriteLine($"Fingerprints recorded: {fingerprints.Count}");
-
-// Читаем лог событий
 var entries = EventLogReader.ReadAll(Path.Combine(runDir, "events.jsonl"));
-Console.WriteLine($"Events logged: {entries.Count}");
+
+Console.WriteLine($"EndTick={manifest?.EndTick}, fingerprints={fingerprints.Count}, events={entries.Count}");
 ```
 
-## RunTicks и Session
+Структура и форматы описаны в [Artifacts](docs/ru/artifacts.md).
 
-`RunTicks` для batch-прогонов:
+## Сессии и внешний ввод
 
-```csharp
-run.RunTicks(engine, seed: 1, endTickInclusive: 1000);
-```
-
-`SimulationSession<TState>` для долгоживущих циклов:
+`RunTicks` подходит для batch-прогонов. `SimulationSession<TState>` подходит для долгоживущих циклов:
 
 ```csharp
 var inbox = new CommandInbox();
@@ -147,21 +146,15 @@ using var session = engine.CreateSession(state, seed: 1, startTick: 0);
 inbox.Enqueue(new AddPopulation(5));
 session.TickOnce();
 session.RunUntil(100);
-```
 
-```csharp
-using EpochSim.Kernel.Messaging;
 [MessageKind("AddPopulation")]
 public sealed record AddPopulation(int Delta) : ICommand;
 ```
 
-## Паттерн внешних входов (HTTP/UI/Queue -> sim)
+Inbox'ы детерминированно передают внешние команды в поток симуляции:
 
-Используйте inbox’ы для детерминированного ввода команд в тике симуляции:
 - `CommandInbox`: команды на ближайший тик.
-- `ScheduledCommandInbox`: команды на заданный тик со стабильным порядком:
-  - сначала `tick` по возрастанию;
-  - затем порядок добавления.
+- `ScheduledCommandInbox`: команды на заданный тик, порядок: сначала тик по возрастанию, затем порядок добавления.
 
 ```csharp
 var scheduled = new ScheduledCommandInbox();
@@ -172,27 +165,56 @@ scheduled.Enqueue(10, new AddPopulation(7));
 scheduled.Enqueue(12, new AddPopulation(1));
 ```
 
-Полные рецепты: [Embedding](docs/Embedding.ru.md)
+Подробнее в [Sessions](docs/ru/sessions.md).
 
-## CLI старт
+## Командная строка
 
 ```bash
-dotnet run --project src/EpochSim.Cli -- init .
-dotnet run --project src/EpochSim.Cli -- run artifacts
-dotnet run --project src/EpochSim.Cli -- list-runs artifacts
+epochsim init .
+epochsim run artifacts
+epochsim list-runs artifacts
+epochsim inspect-run artifacts <runId>
 ```
 
 Отладка детерминизма:
 
 ```bash
-dotnet run --project src/EpochSim.Cli -- verify-run artifacts <runId>
-dotnet run --project src/EpochSim.Cli -- bisect artifacts <runId>
+epochsim verify-run artifacts <runId>
+epochsim bisect artifacts <runId>
 ```
+
+| Команда                                      | Назначение                                      |
+| -------------------------------------------- | ----------------------------------------------- |
+| `init`, `run`                                | Создать стартовое приложение, запустить его     |
+| `list-runs`, `inspect-run`, `pretty-inspect` | Просмотр и инспекция записанных прогонов        |
+| `validate-run`, `verify-run`                 | Проверка артефактов и fingerprint'ов            |
+| `fast-replay`, `bisect`, `repro`             | Replay прогона, поиск первого расхождения       |
+| `event-stats`, `timeline`, `list-adapters`   | Анализ событий и список доступных адаптеров     |
+
+## Состав
+
+| Область       | Возможности                                                                    |
+| ------------- | ------------------------------------------------------------------------------ |
+| Движок        | Упорядоченные системы, прогоны по seed, выполнение по тикам и сессиям.         |
+| Пресеты       | `QuickRun`, `RecommendedRun`, `DebugRun`, builder для своих конфигураций.      |
+| Ввод          | `CommandInbox`, `ScheduledCommandInbox` со стабильным порядком.                |
+| Артефакты     | Манифест, fingerprint'ы состояния, лог событий, артефакты сбоев, профилирование. |
+| Сериализация  | JSON-сериализатор состояния и кодек сообщений, находимых в сборке.             |
+| Диагностика   | Mutation guard, инварианты, проверка replay, bisect.                           |
+| CLI           | .NET-утилита `epochsim` для всего жизненного цикла прогона.                    |
+
+## Документация
+
+|                                    |                                                        |
+| ---------------------------------- | ------------------------------------------------------ |
+| [Embedding](docs/ru/embedding.md)  | Рецепты интеграции: хосты, серверы, внешний ввод       |
+| [Artifacts](docs/ru/artifacts.md)  | Структура каталога прогона и форматы файлов            |
+| [Sessions](docs/ru/sessions.md)    | Долгоживущие циклы и пошаговый режим                   |
+| [Determinism](docs/ru/determinism.md) | Правила, сохраняющие воспроизводимость прогонов     |
 
 ## Примеры
 
-- Простой пример уровня README: [QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs)
-- Продвинутый/legacy пример домена: [Population](src/EpochSim.Samples/Population)
+[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) — минимальная отправная точка. [Population](src/EpochSim.Samples/Population/) — событийный домен с инвариантами и replay.
 
 ## Сборка и тесты
 
@@ -201,17 +223,6 @@ dotnet build EpochSim.slnx -m:1
 dotnet test EpochSim.slnx -m:1
 ```
 
-## Документация
+## Лицензия
 
-Русская:
-- [Embedding.ru](docs/Embedding.ru.md)
-- [Artifacts.ru](docs/Artifacts.ru.md)
-- [Sessions.ru](docs/Sessions.ru.md)
-- [Determinism.ru](docs/Determinism.ru.md)
-
-English:
-- [README.md](README.md)
-- [Embedding](docs/Embedding.md)
-- [Artifacts](docs/Artifacts.md)
-- [Sessions](docs/Sessions.md)
-- [Determinism](docs/Determinism.md)
+[MIT](LICENSE)
