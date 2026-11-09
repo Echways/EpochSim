@@ -24,6 +24,9 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             : ToFailure(seed, first);
     }
 
+    public FuzzRunResult<TState> Trace(ulong seed)
+        => Execute(seed, settings.EndTick, recordFingerprints: true);
+
     public string WriteArtifacts(FuzzFailure failure)
     {
         var root = settings.ArtifactsRoot ?? throw new InvalidOperationException("ArtifactsRoot is not configured.");

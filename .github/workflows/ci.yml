@@ -50,5 +50,6 @@ jobs:
           dotnet pack src/EpochSim.Execution     -c Release --no-build
           dotnet pack src/EpochSim.Serialization -c Release --no-build
           dotnet pack src/EpochSim.Observability -c Release --no-build
+          dotnet pack src/EpochSim.Testing       -c Release --no-build
           dotnet pack src/EpochSim.Cli           -c Release --no-build
           dotnet pack src/EpochSim.All           -c Release --no-build

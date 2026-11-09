@@ -1,0 +1,114 @@
+# Testing
+
+`EpochSim.Testing` adds simulation assertions to ordinary unit tests. It depends on no test framework: a failed check throws `SimulationAssertionException`, and every framework reports an unhandled exception as a failed test. Under the hood it runs [`Epoch.Fuzz`](fuzzing.md), so a failure message names the seed, the tick and the state fields that changed.
+
+## Installation
+
+```bash
+dotnet add package EpochSim.Testing
+```
+
+It is a test dependency and is not part of `EpochSim.All`.
+
+## Assertions
+
+| Method                                              | Checks                                                                 |
+| --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `SimAssert.IsDeterministic<TState>(configure)`      | Runs every seed twice and compares state after every tick. Always enables `CheckDeterminism`. |
+| `SimAssert.InvariantsHold<TState>(configure)`       | Invariants, exceptions and, if `configure` enables it, determinism.    |
+| `SimAssert.NoFailures(report)`                      | Throws when a `FuzzReport` has failures.                               |
+| `SimAssert.MatchesGolden<TState>(configure, path, seed)` | Compares fingerprints of one seed with a stored file.             |
+
+`configure` is the same builder callback as in `Epoch.Fuzz`. A single seed is `Seeds(s, s)`.
+
+## xUnit
+
+```csharp
+using EpochSim.Testing;
+using Xunit;
+
+public sealed class WorldTests
+{
+    [Fact]
+    public void World_IsDeterministic()
+    {
+        SimAssert.IsDeterministic<WorldState>(f => f
+            .State(() => new WorldState())
+            .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+            .Seeds(1, 50)
+            .Ticks(200));
+    }
+}
+```
+
+## NUnit
+
+```csharp
+using EpochSim.Testing;
+using NUnit.Framework;
+
+public sealed class WorldTests
+{
+    [Test]
+    public void World_IsDeterministic()
+    {
+        SimAssert.IsDeterministic<WorldState>(f => f
+            .State(() => new WorldState())
+            .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+            .Seeds(1, 50)
+            .Ticks(200));
+    }
+}
+```
+
+## MSTest
+
+```csharp
+using EpochSim.Testing;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+[TestClass]
+public sealed class WorldTests
+{
+    [TestMethod]
+    public void World_IsDeterministic()
+    {
+        SimAssert.IsDeterministic<WorldState>(f => f
+            .State(() => new WorldState())
+            .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+            .Seeds(1, 50)
+            .Ticks(200));
+    }
+}
+```
+
+## Reading a failure
+
+```
+Fuzz failed: Failures=1, SeedsRun=50, ElapsedMs=12
+
+[InvariantViolation] seed=4 tick=426
+  QueueNonNegative: Pending=-1
+  StateDiff:
+    $.Completed: 198 -> 200
+    $.Pending: 0 -> -1
+  Repro: .Seeds(4, 4).Ticks(426)
+```
+
+The first line is the totals. Each block gives the failure kind, the seed, the tick, what broke, the state fields that changed on that tick, and the `Repro:` fragment that narrows the same test to the failing seed.
+
+## Golden fingerprints
+
+`MatchesGolden` is a regression test for "I changed behavior by accident":
+
+```csharp
+SimAssert.MatchesGolden<WorldState>(
+    f => f
+        .State(() => new WorldState())
+        .Engine(e => e.AddSystem(new WorldSystem()))
+        .Ticks(1000),
+    goldenPath: "golden/world-seed-7.json",
+    seed: 7);
+```
+
+The first run writes the file. It holds the state fingerprints of the seed on every 100th tick and on the last tick. Later runs compare against it and name the first tick that differs. After an intended change, run the tests once with `EPOCHSIM_UPDATE_GOLDEN=1` to rewrite the file and commit it.

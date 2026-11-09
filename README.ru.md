@@ -102,6 +102,24 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000 --ticks 500
 
 Подробнее в [Fuzzing](docs/ru/fuzzing.md).
 
+## Тестирование
+
+`EpochSim.Testing` даёт те же проверки в xUnit, NUnit и MSTest, не завися ни от одного из них:
+
+```bash
+dotnet add package EpochSim.Testing
+```
+
+```csharp
+SimAssert.IsDeterministic<WorldState>(f => f
+    .State(() => new WorldState())
+    .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+    .Seeds(1, 50)
+    .Ticks(200));
+```
+
+Сообщение о сбое называет seed, тик и изменившиеся поля состояния. Подробнее в [Testing](docs/ru/testing.md).
+
 ## Пресеты запуска
 
 | Пресет           | Каденция fingerprint | Mutation guard | Когда использовать                |
@@ -238,6 +256,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | Артефакты     | Манифест, fingerprint'ы состояния, лог событий, артефакты сбоев, профилирование. |
 | Сериализация  | JSON-сериализатор состояния и кодек сообщений, находимых в сборке.             |
 | Диагностика   | Mutation guard, инварианты, проверка replay, bisect, полевой дифф состояния.   |
+| Тестирование  | `EpochSim.Testing`: `SimAssert` для любого тестового фреймворка, золотые fingerprint'ы. |
 | Fuzzing       | `Epoch.Fuzz`: диапазоны seed, инварианты, проверка детерминизма, воспроизводимые сбои. |
 | CLI           | .NET-утилита `epochsim` для всего жизненного цикла прогона.                    |
 
@@ -250,6 +269,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | [Sessions](docs/ru/sessions.md)    | Долгоживущие циклы и пошаговый режим                   |
 | [Determinism](docs/ru/determinism.md) | Правила, сохраняющие воспроизводимость прогонов     |
 | [Fuzzing](docs/ru/fuzzing.md)      | Поиск сбойных seed и их воспроизведение                |
+| [Testing](docs/ru/testing.md)      | `SimAssert` для xUnit, NUnit и MSTest                  |
 
 ## Примеры
 

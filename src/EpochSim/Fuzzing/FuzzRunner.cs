@@ -8,6 +8,9 @@ internal static class FuzzRunner
 {
     private const int MaxArtifactSeeds = 10;
 
+    public static FuzzRunResult<TState> Trace<TState>(FuzzSettings<TState> settings, ulong seed)
+        => new FuzzSeedRunner<TState>(settings).Trace(seed);
+
     public static FuzzReport Run<TState>(FuzzSettings<TState> settings)
     {
         var stopwatch = Stopwatch.StartNew();

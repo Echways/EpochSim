@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\EpochSim\EpochSim.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>EpochSim.Testing</PackageId>
+
+    <PackageDescription>Framework-agnostic assertions for EpochSim: check determinism and invariants over seed ranges from xUnit, NUnit or MSTest.</PackageDescription>
+    <PackageTags>epochsim;testing;assert;fuzz;deterministic;simulation;xunit;nunit;mstest</PackageTags>
+    <Authors>Echways</Authors>
+    <PackageProjectUrl>https://github.com/Echways/EpochSim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Echways/EpochSim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+</Project>

@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\EpochSim.Kernel\EpochSim.Kernel.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Cli\EpochSim.Cli.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Samples\EpochSim.Samples.csproj" />
+    <ProjectReference Include="..\..\src\EpochSim.Testing\EpochSim.Testing.csproj" />
     <ProjectReference Include="..\..\src\EpochSim.Serialization\EpochSim.Serialization.csproj" />
   </ItemGroup>
 

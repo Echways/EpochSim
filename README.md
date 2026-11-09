@@ -102,6 +102,24 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000 --ticks 500
 
 More in [Fuzzing](docs/en/fuzzing.md).
 
+## Testing
+
+`EpochSim.Testing` brings the same checks to xUnit, NUnit and MSTest without depending on any of them:
+
+```bash
+dotnet add package EpochSim.Testing
+```
+
+```csharp
+SimAssert.IsDeterministic<WorldState>(f => f
+    .State(() => new WorldState())
+    .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+    .Seeds(1, 50)
+    .Ticks(200));
+```
+
+A failure names the seed, the tick and the changed state fields. More in [Testing](docs/en/testing.md).
+
 ## Run presets
 
 | Preset           | Fingerprint cadence | Mutation guard | Typical use                    |
@@ -238,6 +256,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | Artifacts     | Manifest, state fingerprints, event log, failure artifacts, profiling.        |
 | Serialization | JSON state serializer and message codec discovered from an assembly.          |
 | Diagnostics   | Mutation guard, invariants, replay verification, bisect, field-level state diff. |
+| Testing       | `EpochSim.Testing`: `SimAssert` for any test framework, golden fingerprints.  |
 | Fuzzing       | `Epoch.Fuzz`: seed ranges, invariants, determinism check, reproducible failures. |
 | CLI           | `epochsim` .NET tool covering the whole run lifecycle.                        |
 
@@ -250,6 +269,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | [Sessions](docs/en/sessions.md)      | Long-lived loops and stepping                        |
 | [Determinism](docs/en/determinism.md) | Rules that keep runs reproducible                   |
 | [Fuzzing](docs/en/fuzzing.md)        | Finding failing seeds and reproducing them           |
+| [Testing](docs/en/testing.md)        | `SimAssert` for xUnit, NUnit and MSTest              |
 
 ## Samples
 

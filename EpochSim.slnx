@@ -8,6 +8,7 @@
     <Project Path="src/EpochSim.Observability/EpochSim.Observability.csproj" />
     <Project Path="src/EpochSim.Samples/EpochSim.Samples.csproj" />
     <Project Path="src/EpochSim.Serialization/EpochSim.Serialization.csproj" />
+    <Project Path="src/EpochSim.Testing/EpochSim.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj" />
