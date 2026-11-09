@@ -256,6 +256,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | Artifacts     | Manifest, state fingerprints, event log, failure artifacts, profiling.        |
 | Serialization | JSON state serializer and message codec discovered from an assembly.          |
 | Diagnostics   | Mutation guard, invariants, replay verification, bisect, field-level state diff. |
+| Analyzer      | Roslyn rules ESIM001-ESIM006 flag wall-clock time, `Random`, threads and more in simulation code. |
 | Testing       | `EpochSim.Testing`: `SimAssert` for any test framework, golden fingerprints.  |
 | Fuzzing       | `Epoch.Fuzz`: seed ranges, invariants, determinism check, reproducible failures. |
 | CLI           | `epochsim` .NET tool covering the whole run lifecycle.                        |

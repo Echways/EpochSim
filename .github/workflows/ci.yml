@@ -51,5 +51,13 @@ jobs:
           dotnet pack src/EpochSim.Serialization -c Release --no-build
           dotnet pack src/EpochSim.Observability -c Release --no-build
           dotnet pack src/EpochSim.Testing       -c Release --no-build
+          dotnet pack src/EpochSim.Analyzers     -c Release --no-build
+
+      - name: Verify analyzer is packed
+        run: |
+          for pkg in src/EpochSim/bin/Release/EpochSim.[0-9]*.nupkg src/EpochSim.Analyzers/bin/Release/EpochSim.Analyzers.[0-9]*.nupkg; do
+            unzip -Z1 "$pkg" | grep -Fx "analyzers/dotnet/cs/EpochSim.Analyzers.dll" > /dev/null
+            unzip -Z1 "$pkg" | grep -Fx "analyzers/dotnet/cs/EpochSim.Analyzers.CodeFixes.dll" > /dev/null
+          done
           dotnet pack src/EpochSim.Cli           -c Release --no-build
           dotnet pack src/EpochSim.All           -c Release --no-build

@@ -11,6 +11,66 @@ EpochSim guarantees deterministic execution for identical inputs: initial state,
 - thread races that change event order
 - uncontrolled floating-point behavior
 
+## Analyzer
+
+`EpochSim` ships a Roslyn analyzer that turns these pitfalls into compiler warnings. It is included in the `EpochSim` package and also available alone as `EpochSim.Analyzers`. It reports constructs only inside simulation code, so the rest of your project is never touched.
+
+### What counts as simulation code
+
+- Lambdas and method groups passed to `SimulationEngine<TState>.AddSystem(...)` and `OnCommand(...)`.
+- Every method of a type that implements `ISystem<>`, `ICommandHandler<,>` or `IInvariant<>`.
+- Types and methods marked with `[Deterministic]` (`EpochSim.Kernel.Determinism`).
+
+Calls into other methods are not followed. Mark a helper with `[Deterministic]` to check it too.
+
+```csharp
+using EpochSim.Kernel.Determinism;
+
+[Deterministic]
+public static class Pricing
+{
+    public static int Roll(IRng rng) => rng.NextInt(1, 7);
+}
+```
+
+### Rules
+
+| ID      | Default severity | Reports                                                                                                                    |
+| ------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ESIM001 | warning          | `DateTime.Now/UtcNow/Today`, `DateTimeOffset.Now/UtcNow`, `Stopwatch`, `Environment.TickCount/TickCount64`, `TimeProvider.System` |
+| ESIM002 | warning          | `new Random(...)`, `Random.Shared`, `RandomNumberGenerator`, `Guid.NewGuid()`                                              |
+| ESIM003 | warning          | `Task.Run`, `Task.Factory.StartNew`, `new Thread`, `ThreadPool.*`, `Parallel.*`, `AsParallel()`, `async` lambdas, `await`  |
+| ESIM004 | warning          | `GetHashCode()` on `string` and `object`, enumeration of `ConcurrentDictionary`, `ConcurrentBag`, `ConcurrentQueue`        |
+| ESIM005 | warning          | `File.*`, `Directory.*`, `HttpClient`, `Environment.GetEnvironmentVariable`, `Environment.MachineName`                     |
+| ESIM006 | hidden           | `foreach` and LINQ over `Dictionary<,>` and `HashSet<>`                                                                    |
+
+ESIM006 is hidden by default: .NET enumerates these collections in a stable order for identical operations, so it is only fragile, not wrong. Raise it when you want the stricter check.
+
+### Configuring
+
+Use `.editorconfig`:
+
+```ini
+[*.cs]
+dotnet_diagnostic.ESIM001.severity = error
+dotnet_diagnostic.ESIM005.severity = none
+dotnet_diagnostic.ESIM006.severity = warning
+```
+
+A single occurrence can be suppressed with `#pragma warning disable ESIM001`.
+
+### Code fix
+
+ESIM002 offers a fix when a `TickContext<>` or `EventContext<>` parameter is in scope:
+
+| Before                              | After                      |
+| ----------------------------------- | -------------------------- |
+| `Random.Shared.Next(a, b)`          | `ctx.Rng.NextInt(a, b)`    |
+| `new Random(seed).Next(a, b)`       | `ctx.Rng.NextInt(a, b)`    |
+| `Random.Shared.NextDouble()`        | `ctx.Rng.NextDouble01()`   |
+
+The method-group check runs when the whole compilation is analyzed (a build). The IDE may show it only after a build.
+
 ## Recommended practices
 
 - Use only `ctx.Rng` for domain randomness.

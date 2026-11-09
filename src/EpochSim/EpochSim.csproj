@@ -4,6 +4,7 @@
     <ProjectReference Include="..\EpochSim.Execution\EpochSim.Execution.csproj" />
     <ProjectReference Include="..\EpochSim.Serialization\EpochSim.Serialization.csproj" />
     <ProjectReference Include="..\EpochSim.Observability\EpochSim.Observability.csproj" />
+    <ProjectReference Include="..\EpochSim.Analyzers\EpochSim.Analyzers.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -25,6 +26,8 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="" />
+    <None Include="..\EpochSim.Analyzers\bin\$(Configuration)\netstandard2.0\EpochSim.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\EpochSim.Analyzers.CodeFixes\bin\$(Configuration)\netstandard2.0\EpochSim.Analyzers.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
 </Project>

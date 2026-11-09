@@ -43,6 +43,7 @@ jobs:
           dotnet pack src/EpochSim.Serialization -c Release --no-restore
           dotnet pack src/EpochSim.Observability -c Release --no-restore
           dotnet pack src/EpochSim.Testing       -c Release --no-restore
+          dotnet pack src/EpochSim.Analyzers     -c Release --no-restore
           dotnet pack src/EpochSim.Cli       -c Release --no-restore
           dotnet pack src/EpochSim.All       -c Release --no-restore
 
