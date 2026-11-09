@@ -1,0 +1,145 @@
+using EpochSim.Execution;
+using EpochSim.Kernel.Validation;
+using EpochSim.Serialization.EventLog;
+using EpochSim.Serialization.State;
+
+namespace EpochSim.Fuzzing;
+
+public sealed class FuzzBuilder<TState>
+{
+    private Func<TState>? _stateFactory;
+    private Action<SimulationEngine<TState>>? _configureEngine;
+    private long? _endTick;
+    private IEnumerable<ulong>? _seeds;
+    private IStateSerializer<TState>? _serializer;
+    private Func<IEnumerable<IInvariant<TState>>>? _invariants;
+    private Action<FuzzCommandPlan>? _commands;
+    private bool _checkDeterminism;
+    private int _parallelism = Environment.ProcessorCount;
+    private bool _stopAtFirstFailure;
+    private string? _artifactsRoot;
+    private IEventCodecV2? _eventCodec;
+    private IProgress<FuzzProgress>? _progress;
+
+    internal FuzzBuilder()
+    {
+    }
+
+    public FuzzBuilder<TState> State(Func<TState> factory)
+    {
+        _stateFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Engine(Action<SimulationEngine<TState>> configure)
+    {
+        _configureEngine = configure ?? throw new ArgumentNullException(nameof(configure));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Ticks(long endTickInclusive)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(endTickInclusive);
+        _endTick = endTickInclusive;
+        return this;
+    }
+
+    public FuzzBuilder<TState> Seeds(ulong fromInclusive, ulong toInclusive)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(fromInclusive, toInclusive, nameof(fromInclusive));
+        _seeds = EnumerateSeeds(fromInclusive, toInclusive);
+        return this;
+    }
+
+    public FuzzBuilder<TState> Seeds(IEnumerable<ulong> seeds)
+    {
+        _seeds = seeds ?? throw new ArgumentNullException(nameof(seeds));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Serializer(IStateSerializer<TState> serializer)
+    {
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Invariants(Func<IEnumerable<IInvariant<TState>>> factory)
+    {
+        _invariants = factory ?? throw new ArgumentNullException(nameof(factory));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Commands(Action<FuzzCommandPlan> configure)
+    {
+        _commands = configure ?? throw new ArgumentNullException(nameof(configure));
+        return this;
+    }
+
+    public FuzzBuilder<TState> CheckDeterminism(bool enabled = true)
+    {
+        _checkDeterminism = enabled;
+        return this;
+    }
+
+    public FuzzBuilder<TState> Parallelism(int degree)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(degree, 1);
+        _parallelism = degree;
+        return this;
+    }
+
+    public FuzzBuilder<TState> StopAtFirstFailure(bool enabled = true)
+    {
+        _stopAtFirstFailure = enabled;
+        return this;
+    }
+
+    public FuzzBuilder<TState> ArtifactsRoot(string rootDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
+        _artifactsRoot = rootDirectory;
+        return this;
+    }
+
+    public FuzzBuilder<TState> EventCodec(IEventCodecV2 codec)
+    {
+        _eventCodec = codec ?? throw new ArgumentNullException(nameof(codec));
+        return this;
+    }
+
+    public FuzzBuilder<TState> Progress(IProgress<FuzzProgress> progress)
+    {
+        _progress = progress ?? throw new ArgumentNullException(nameof(progress));
+        return this;
+    }
+
+    internal FuzzSettings<TState> Build()
+        => new(
+            _stateFactory ?? throw MissingParameter(nameof(State)),
+            _configureEngine ?? throw MissingParameter(nameof(Engine)),
+            _endTick ?? throw MissingParameter(nameof(Ticks)),
+            _seeds ?? throw MissingParameter(nameof(Seeds)),
+            _serializer ?? new JsonStateSerializer<TState>(),
+            _invariants,
+            _commands,
+            _checkDeterminism,
+            _parallelism,
+            _stopAtFirstFailure,
+            _artifactsRoot,
+            _eventCodec,
+            _progress);
+
+    private static InvalidOperationException MissingParameter(string name)
+        => new($"Epoch.Fuzz requires {name}(...) to be configured.");
+
+    private static IEnumerable<ulong> EnumerateSeeds(ulong fromInclusive, ulong toInclusive)
+    {
+        for (var seed = fromInclusive; ; seed++)
+        {
+            yield return seed;
+
+            if (seed == toInclusive)
+                yield break;
+        }
+    }
+}

@@ -1,5 +1,6 @@
 using System.Reflection;
 using EpochSim.Execution;
+using EpochSim.Fuzzing;
 using EpochSim.Kernel.Validation;
 using EpochSim.Serialization.EventLog;
 using EpochSim.Serialization.State;
@@ -30,6 +31,15 @@ public static class Epoch
             builder.WithStrictUnknownKinds();
 
         return builder.Build();
+    }
+
+    public static FuzzReport Fuzz<TState>(Action<FuzzBuilder<TState>> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var builder = new FuzzBuilder<TState>();
+        configure(builder);
+        return FuzzRunner.Run(builder.Build());
     }
 
     public static EpochSimRunScope<TState> QuickRun<TState>(
