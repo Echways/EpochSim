@@ -28,6 +28,7 @@ public sealed class CliApp
             ["inspect-run"] = new InspectRunCommand(),
             ["bisect"] = new BisectCommand(),
             ["repro"] = new ReproCommand(),
+            ["fuzz"] = new FuzzCommand(),
             ["list-adapters"] = new ListAdaptersCommand()
         };
     }
@@ -37,6 +38,11 @@ public sealed class CliApp
         var commandName = args.Length > 0 ? args[0] : "run";
         var root = args.Length > 1 ? args[1] : "artifacts";
         var commandArgs = args.Length > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
+
+        if (string.Equals(commandName, "fuzz", StringComparison.OrdinalIgnoreCase))
+        {
+            commandArgs = args.Skip(1).ToArray();
+        }
 
         if (string.Equals(commandName, "init", StringComparison.OrdinalIgnoreCase))
         {
@@ -100,6 +106,7 @@ public sealed class CliApp
         Console.WriteLine("  list-runs <artifactsRoot> [limit]");
         Console.WriteLine("  inspect-run <artifactsRoot> <runId>");
         Console.WriteLine("  repro <artifactsRoot> [runId] [failureTick] [seedOverride]");
+        Console.WriteLine("  fuzz [--adapter name] [--seeds A..B] [--ticks N] [--check-determinism] [--parallel N] [--out dir]");
         Console.WriteLine("  list-adapters");
         Console.WriteLine();
         Console.WriteLine("Pass --help to any command for detailed usage.");

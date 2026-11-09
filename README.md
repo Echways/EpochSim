@@ -17,10 +17,11 @@ Run a simulation from a seed, record fingerprints and events, then verify, repla
 
 A simulation that cannot be reproduced cannot be debugged. EpochSim fixes the inputs of every tick, so the same seed and the same commands always produce the same state, and a divergence can be located to a single tick.
 
+- **Find the seed that breaks your logic.** `Epoch.Fuzz` runs your simulation on thousands of seeds, returns the failing seed and tick, and shows which state fields changed.
 - **Deterministic by construction.** A run is defined by its state, seed and ordered input. Systems execute in a fixed order on one simulation thread.
 - **Run presets.** `QuickRun`, `RecommendedRun` and `DebugRun` cover smoke tests, production diagnostics and strict invariant hunting with one call.
 - **Artifacts for every run.** Manifest, per-tick state fingerprints and an optional event log are written to disk and readable from code.
-- **Replay and bisect.** Verify a run against its recorded fingerprints and find the first tick where two runs diverge.
+- **Replay and bisect.** Verify a run against its recorded fingerprints and find the first tick where an invariant is violated.
 - **Deterministic input.** `CommandInbox` and `ScheduledCommandInbox` feed commands from HTTP, UI or queues in a stable order.
 - **Long-lived sessions.** `SimulationSession<TState>` supports games, servers and interactive stepping.
 - **A CLI for the whole workflow.** Run, list, inspect, validate, replay, bisect and reproduce runs from the terminal.
@@ -66,6 +67,40 @@ public sealed class WorldState
 Always call `run.RunTicks(engine, ...)` rather than `engine.RunTicks(state, ...)`, so the state passed in is the one the run scope was built with.
 
 More in [Embedding](docs/en/embedding.md).
+
+## Find bugs by seed
+
+`Epoch.Fuzz` runs the simulation on a range of seeds and checks invariants, exceptions and, optionally, determinism. Every failure comes with a seed that reproduces it and the state fields that changed on the failing tick.
+
+```csharp
+var report = Epoch.Fuzz<JobQueueState>(f => f
+    .State(() => new JobQueueState())
+    .Engine(e => e.AddSystem(new JobQueueSystem()))
+    .Invariants(() => [new QueueNonNegativeInvariant()])
+    .Seeds(1, 1000)
+    .Ticks(500));
+
+report.ThrowIfFailed();
+```
+
+```
+Fuzz failed: Failures=14, SeedsRun=1000, ElapsedMs=81
+
+[InvariantViolation] seed=4 tick=426
+  QueueNonNegative: Pending=-1
+  StateDiff:
+    $.Completed: 198 -> 200
+    $.Pending: 0 -> -1
+  Repro: .Seeds(4, 4).Ticks(426)
+```
+
+Add `.CheckDeterminism()` to run every seed twice and catch `static` state, wall-clock time and other sources of non-determinism. The same run from the terminal:
+
+```bash
+epochsim fuzz --adapter fuzzbug --seeds 1..1000 --ticks 500
+```
+
+More in [Fuzzing](docs/en/fuzzing.md).
 
 ## Run presets
 
@@ -181,6 +216,7 @@ Determinism debugging:
 ```bash
 epochsim verify-run artifacts <runId>
 epochsim bisect artifacts <runId>
+epochsim fuzz --adapter fuzzbug --seeds 1..1000
 ```
 
 | Command                                            | Purpose                                    |
@@ -188,7 +224,8 @@ epochsim bisect artifacts <runId>
 | `init`, `run`                                      | Create a starter app, run it               |
 | `list-runs`, `inspect-run`, `pretty-inspect`       | Browse and inspect recorded runs           |
 | `validate-run`, `verify-run`                       | Check artifacts and fingerprints           |
-| `fast-replay`, `bisect`, `repro`                   | Replay a run, find the first divergence    |
+| `fast-replay`, `bisect`, `repro`                   | Replay a run, find the first violation     |
+| `fuzz`                                             | Run many seeds, find the one that breaks   |
 | `event-stats`, `timeline`, `list-adapters`         | Analyze events and list available adapters |
 
 ## What is included
@@ -200,7 +237,8 @@ epochsim bisect artifacts <runId>
 | Input         | `CommandInbox`, `ScheduledCommandInbox` with stable ordering.                 |
 | Artifacts     | Manifest, state fingerprints, event log, failure artifacts, profiling.        |
 | Serialization | JSON state serializer and message codec discovered from an assembly.          |
-| Diagnostics   | Mutation guard, invariants, replay verification, bisect.                      |
+| Diagnostics   | Mutation guard, invariants, replay verification, bisect, field-level state diff. |
+| Fuzzing       | `Epoch.Fuzz`: seed ranges, invariants, determinism check, reproducible failures. |
 | CLI           | `epochsim` .NET tool covering the whole run lifecycle.                        |
 
 ## Documentation
@@ -211,10 +249,11 @@ epochsim bisect artifacts <runId>
 | [Artifacts](docs/en/artifacts.md)    | Run directory layout and file formats                |
 | [Sessions](docs/en/sessions.md)      | Long-lived loops and stepping                        |
 | [Determinism](docs/en/determinism.md) | Rules that keep runs reproducible                   |
+| [Fuzzing](docs/en/fuzzing.md)        | Finding failing seeds and reproducing them           |
 
 ## Samples
 
-[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) is the minimal starting point. [Population](src/EpochSim.Samples/Population/) is an event-heavy domain with invariants and replay.
+[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) is the minimal starting point. [Population](src/EpochSim.Samples/Population/) is an event-heavy domain with invariants and replay. [Fuzzing](src/EpochSim.Samples/Fuzzing/) has a rare seed-dependent bug for `Epoch.Fuzz` to find.
 
 ## Build and test
 
