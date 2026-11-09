@@ -9,6 +9,7 @@ using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
 using EpochSim.Execution.StateFingerprint;
 using EpochSim.Kernel.Determinism;
+using EpochSim.Serialization.Snapshots;
 
 namespace EpochSim.Cli.Commands;
 
@@ -122,7 +123,47 @@ public sealed class VerifyRunCommand : DomainCommandBase
         Console.WriteLine($"VerifyMismatchTick={mismatch.Value.Tick}");
         Console.WriteLine($"Expected={mismatch.Value.Expected}");
         Console.WriteLine($"Actual={mismatch.Value.Actual}");
+
+        foreach (var line in DescribeMismatch(adapter, paths, mismatch.Value.Tick, seed, options, ctx))
+            Console.WriteLine(line);
+
         return 3;
+    }
+
+    private static IReadOnlyList<string> DescribeMismatch<TState>(
+        IDomainAdapter<TState> adapter,
+        RunPaths paths,
+        long tick,
+        ulong seed,
+        RunOptions options,
+        CommandContext ctx)
+    {
+        var snapshotPath = Path.Combine(paths.SnapshotsDir, $"snapshot-{tick}.json");
+        if (!File.Exists(snapshotPath))
+            return [$"StateDiffUnavailable: no snapshot at tick {tick}"];
+
+        var snapshot = SnapshotReader.Read(snapshotPath);
+
+        var engine = new SimulationEngine<TState>();
+        adapter.ConfigureEngine(engine);
+
+        var replayed = SnapshotRunner.LoadBestAndReplayTo(
+            engine: engine,
+            snapshotsDir: paths.SnapshotsDir,
+            eventsPath: paths.ResolveEventsPath(),
+            serializer: adapter.Serializer,
+            codec: adapter.Codec,
+            seed: seed,
+            endTick: tick,
+            newState: adapter.CreateInitialState,
+            options: options,
+            cancellationToken: ctx.Cancellation,
+            maxSnapshotTick: tick - 1);
+
+        return StateDiffReport.Describe(
+            $"StateDiff (snapshot -> replay, tick {tick}):",
+            snapshot.StateJson,
+            adapter.Serializer.Serialize(replayed));
     }
 
     private static (long Tick, string Expected, string Actual)? FindFirstMismatch(

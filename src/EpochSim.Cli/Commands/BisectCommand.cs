@@ -9,11 +9,15 @@ using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.Snapshots;
 using EpochSim.Kernel.Determinism;
 using EpochSim.Kernel.Validation;
+using EpochSim.Serialization.EventLog;
 
 namespace EpochSim.Cli.Commands;
 
 public sealed class BisectCommand : DomainCommandBase
 {
+    private const int MaxEventLines = 20;
+    private const string StateDiffFileName = "statediff.txt";
+
     public string Help =>
         """
         bisect <artifactsRoot> [runId] [--end-tick N] [--seed N]
@@ -86,7 +90,7 @@ public sealed class BisectCommand : DomainCommandBase
             RngVersion = ResolveRngVersion(manifest?.RngVersion)
         };
 
-        bool FailsUpTo(long probeTick, out InvariantViolationException? ex)
+        bool FailsUpTo(long probeTick, out InvariantViolationException? ex, out TState probedState)
         {
             var engine = new SimulationEngine<TState>();
             adapter.ConfigureEngine(engine);
@@ -103,7 +107,7 @@ public sealed class BisectCommand : DomainCommandBase
 
             try
             {
-                SnapshotRunner.LoadBestAndReplayTo(
+                probedState = SnapshotRunner.LoadBestAndReplayTo(
                     engine: engine,
                     snapshotsDir: paths.SnapshotsDir,
                     eventsPath: eventsPath,
@@ -121,6 +125,7 @@ public sealed class BisectCommand : DomainCommandBase
             catch (InvariantViolationException e)
             {
                 ex = e;
+                probedState = world;
                 return true;
             }
         }
@@ -130,7 +135,7 @@ public sealed class BisectCommand : DomainCommandBase
         Console.WriteLine($"EndTick={endTick}");
         Console.WriteLine($"Seed={seed}");
 
-        if (!FailsUpTo(endTick, out var exAtEnd))
+        if (!FailsUpTo(endTick, out var exAtEnd, out _))
         {
             Console.WriteLine("NoInvariantViolationUpToEndTick");
             return 0;
@@ -143,13 +148,13 @@ public sealed class BisectCommand : DomainCommandBase
         {
             var mid = lo + ((hi - lo) / 2);
 
-            if (FailsUpTo(mid, out var exMid))
+            if (FailsUpTo(mid, out var exMid, out _))
                 hi = exMid!.Time.Tick;
             else
                 lo = mid + 1;
         }
 
-        FailsUpTo(lo, out var exFinal);
+        FailsUpTo(lo, out var exFinal, out var failedState);
 
         Console.WriteLine($"FirstViolationTick={lo}");
 
@@ -157,6 +162,20 @@ public sealed class BisectCommand : DomainCommandBase
         {
             Console.WriteLine($"Invariant={exFinal.InvariantName}");
             Console.WriteLine($"Message={exFinal.Detail}");
+
+            var previousStateJson = lo > 0 && !FailsUpTo(lo - 1, out _, out var previousState)
+                ? stateSerializer.Serialize(previousState)
+                : stateSerializer.Serialize(adapter.CreateInitialState());
+
+            var diffReport = BuildDiffReport(
+                lo,
+                previousStateJson,
+                stateSerializer.Serialize(failedState),
+                EventLogReader.ReadStream(eventsPath).Where(e => e.Tick == lo).ToArray(),
+                adapter);
+
+            foreach (var line in diffReport)
+                Console.WriteLine(line);
 
             var minDir = MinReproWriter.Create(
                 paths: paths,
@@ -168,11 +187,40 @@ public sealed class BisectCommand : DomainCommandBase
                 serializer: stateSerializer,
                 newState: adapter.CreateInitialState);
 
+            File.WriteAllLines(Path.Combine(minDir, StateDiffFileName), diffReport);
+
             Console.WriteLine($"MinReproDir={minDir}");
             Console.WriteLine("MinReproFiles=snapshot.json,events.jsonl,meta.txt");
         }
 
         return 2;
+    }
+
+    private static IReadOnlyList<string> BuildDiffReport<TState>(
+        long tick,
+        string previousStateJson,
+        string failedStateJson,
+        IReadOnlyList<EventLogEntryV2> eventsAtTick,
+        IDomainAdapter<TState> adapter)
+    {
+        var title = tick > 0
+            ? $"StateDiff (tick {tick - 1} -> {tick}):"
+            : "StateDiff (initial -> tick 0):";
+
+        var lines = new List<string>(StateDiffReport.Describe(title, previousStateJson, failedStateJson))
+        {
+            $"EventsAtTick={eventsAtTick.Count}"
+        };
+
+        foreach (var entry in eventsAtTick.Take(MaxEventLines))
+        {
+            var text = adapter.PayloadFormatter.TryFormat(entry.Kind, entry.PayloadJson, out var formatted)
+                ? formatted
+                : entry.PayloadJson;
+            lines.Add($"  [{entry.Kind}] {text}");
+        }
+
+        return lines;
     }
 
     private static RngVersion ResolveRngVersion(string? raw)
