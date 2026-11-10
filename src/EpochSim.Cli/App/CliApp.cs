@@ -36,6 +36,12 @@ public sealed class CliApp
 
     public Task<int> RunAsync(string[] args)
     {
+        if (args.Length > 0 && IsHelpFlag(args[0]))
+        {
+            PrintUsage();
+            return Task.FromResult(0);
+        }
+
         var commandName = args.Length > 0 ? args[0] : "run";
         var root = args.Length > 1 ? args[1] : "artifacts";
         var commandArgs = args.Length > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
@@ -70,8 +76,7 @@ public sealed class CliApp
             return Task.FromResult(2);
         }
 
-        if (commandArgs.Any(a => string.Equals(a, "--help", StringComparison.OrdinalIgnoreCase)
-                              || string.Equals(a, "-h", StringComparison.OrdinalIgnoreCase)))
+        if (commandArgs.Any(IsHelpFlag))
         {
             Console.WriteLine(command.Help);
             return Task.FromResult(0);
@@ -88,6 +93,10 @@ public sealed class CliApp
             return Task.FromResult(2);
         }
     }
+
+    private static bool IsHelpFlag(string arg) =>
+        string.Equals(arg, "--help", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(arg, "-h", StringComparison.OrdinalIgnoreCase);
 
     private static void PrintUsage()
     {
