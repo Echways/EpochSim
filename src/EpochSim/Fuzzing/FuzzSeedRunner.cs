@@ -11,21 +11,21 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
 {
     public FuzzFailure? Check(ulong seed)
     {
-        var first = Execute(seed, settings.EndTick, recordFingerprints: settings.CheckDeterminism);
+        var first = Execute(seed, settings.EndTick, recordFingerprints: settings.CheckDeterminism, settings.OnlyCommands);
 
         if (!settings.CheckDeterminism)
-            return ToFailure(seed, first);
+            return ShrinkIfNeeded(seed, first);
 
-        var second = Execute(seed, settings.EndTick, recordFingerprints: true);
+        var second = Execute(seed, settings.EndTick, recordFingerprints: true, settings.OnlyCommands);
 
         var divergenceTick = FindDivergenceTick(first, second);
         return divergenceTick is { } tick
             ? BuildNonDeterminismFailure(seed, tick)
-            : ToFailure(seed, first);
+            : ShrinkIfNeeded(seed, first);
     }
 
     public FuzzRunResult<TState> Trace(ulong seed)
-        => Execute(seed, settings.EndTick, recordFingerprints: true);
+        => Execute(seed, settings.EndTick, recordFingerprints: true, settings.OnlyCommands);
 
     public string WriteArtifacts(FuzzFailure failure)
     {
@@ -49,7 +49,7 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
         builder.WithStateFingerprints(settings.Serializer, everyTicks: 1);
 
         using var scope = builder.Build();
-        var engine = CreateEngine(failure.Seed);
+        var engine = CreateEngine(failure.Seed, failure.MinimalCommandIndices ?? settings.OnlyCommands);
 
         try
         {
@@ -66,10 +66,10 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
         => exception is not OperationCanceledException
            && string.Equals(Describe(exception).Summary, failure.Summary, StringComparison.Ordinal);
 
-    private FuzzRunResult<TState> Execute(ulong seed, long endTick, bool recordFingerprints)
+    private FuzzRunResult<TState> Execute(ulong seed, long endTick, bool recordFingerprints, IReadOnlyList<int>? selection)
     {
         var state = settings.StateFactory();
-        var engine = CreateEngine(seed);
+        var engine = CreateEngine(seed, selection);
 
         var probe = new FuzzTickProbe();
         engine.AddMiddleware(probe);
@@ -99,31 +99,40 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
         return new FuzzRunResult<TState>(state, error, probe.LastTick, sink.Records);
     }
 
-    private SimulationEngine<TState> CreateEngine(ulong seed)
+    private SimulationEngine<TState> CreateEngine(ulong seed, IReadOnlyList<int>? selection)
     {
         var engine = new SimulationEngine<TState>();
         settings.ConfigureEngine(engine);
 
-        if (settings.Commands is { } configureCommands)
+        if (BuildPlan(seed) is { IsEmpty: false } plan)
         {
-            var plan = new FuzzCommandPlan(seed, settings.EndTick);
-            configureCommands(plan);
-
-            if (!plan.IsEmpty)
-            {
-                var inbox = new ScheduledCommandInbox();
-                plan.ScheduleInto(inbox);
-                engine.AttachScheduledInbox(inbox);
-            }
+            var inbox = new ScheduledCommandInbox();
+            plan.ScheduleInto(inbox, selection?.ToHashSet());
+            engine.AttachScheduledInbox(inbox);
         }
 
         return engine;
     }
 
+    private FuzzCommandPlan? BuildPlan(ulong seed)
+    {
+        if (settings.Commands is not { } configureCommands)
+            return null;
+
+        var plan = new FuzzCommandPlan(seed, settings.EndTick);
+        configureCommands(plan);
+
+        if (settings.OnlyCommands is { Count: > 0 } selection && selection[^1] >= plan.Count)
+            throw new InvalidOperationException(
+                $"OnlyCommands refers to command #{selection[^1]}, but the plan for seed {seed} has {plan.Count} commands.");
+
+        return plan;
+    }
+
     private IReadOnlyList<IInvariant<TState>> CreateInvariants()
         => settings.Invariants is { } factory ? factory().ToArray() : [];
 
-    private FuzzFailure? ToFailure(ulong seed, FuzzRunResult<TState> result)
+    private FuzzFailure? ToFailure(ulong seed, FuzzRunResult<TState> result, IReadOnlyList<int>? selection)
     {
         if (result.Error is not { } error)
             return null;
@@ -136,9 +145,49 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             kind,
             tick,
             summary,
-            ComputeFailureDiff(seed, tick, result.State),
+            ComputeFailureDiff(seed, tick, result.State, selection),
             ArtifactsDir: null,
-            ReproCode(seed, tick, kind));
+            ReproCode(seed, tick, kind, selection))
+        {
+            ReproTicks = ReproTicks(tick)
+        };
+    }
+
+    private FuzzFailure? ShrinkIfNeeded(ulong seed, FuzzRunResult<TState> result)
+    {
+        var failure = ToFailure(seed, result, settings.OnlyCommands);
+
+        if (failure is null || !settings.Shrink || result.Error is not { } error)
+            return failure;
+
+        if (BuildPlan(seed) is not { IsEmpty: false } plan)
+            return failure;
+
+        var identity = FuzzFailureIdentity.Of(error);
+        var original = settings.OnlyCommands ?? Enumerable.Range(0, plan.Count).ToArray();
+
+        var shrink = CommandShrinker.Minimize(
+            original,
+            candidate => Execute(seed, settings.EndTick, recordFingerprints: false, candidate) is { Error: { } replayed }
+                         && FuzzFailureIdentity.Of(replayed) == identity,
+            settings.ShrinkBudget);
+
+        var minimal = ToFailure(
+            seed,
+            Execute(seed, settings.EndTick, recordFingerprints: false, shrink.Indices),
+            shrink.Indices);
+
+        if (minimal is null || minimal.Kind != failure.Kind)
+            return failure with { ShrinkSkipReason = "the failure did not reproduce while shrinking; the simulation may be non-deterministic, try CheckDeterminism" };
+
+        return minimal with
+        {
+            OriginalCommandCount = original.Count,
+            MinimalCommandIndices = shrink.Indices,
+            MinimalCommands = plan.Describe(shrink.Indices),
+            ShrinkAttempts = shrink.Attempts,
+            ShrinkBudgetExhausted = shrink.BudgetExhausted
+        };
     }
 
     private static (FuzzFailureKind Kind, string Summary) Describe(Exception error)
@@ -148,8 +197,8 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
 
     private FuzzFailure BuildNonDeterminismFailure(ulong seed, long tick)
     {
-        var left = Execute(seed, tick, recordFingerprints: false);
-        var right = Execute(seed, tick, recordFingerprints: false);
+        var left = Execute(seed, tick, recordFingerprints: false, settings.OnlyCommands);
+        var right = Execute(seed, tick, recordFingerprints: false, settings.OnlyCommands);
 
         return new FuzzFailure(
             seed,
@@ -158,13 +207,22 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             $"Two runs of the same seed diverged at tick {tick}.",
             SafeDiff(() => settings.Serializer.Serialize(left.State), () => settings.Serializer.Serialize(right.State)),
             ArtifactsDir: null,
-            ReproCode(seed, tick, FuzzFailureKind.NonDeterminism));
+            ReproCode(seed, tick, FuzzFailureKind.NonDeterminism, settings.OnlyCommands))
+        {
+            ReproTicks = ReproTicks(tick),
+            ShrinkSkipReason = ShrinkSkipReasonFor(seed)
+        };
     }
 
-    private IReadOnlyList<StateChange> ComputeFailureDiff(ulong seed, long failureTick, TState failedState)
+    private string? ShrinkSkipReasonFor(ulong seed)
+        => settings.Shrink && BuildPlan(seed) is { IsEmpty: false }
+            ? "non-deterministic failures are not shrunk: replays of the same seed disagree, so a smaller command set cannot be checked reliably"
+            : null;
+
+    private IReadOnlyList<StateChange> ComputeFailureDiff(ulong seed, long failureTick, TState failedState, IReadOnlyList<int>? selection)
         => SafeDiff(
             () => failureTick > 0
-                ? settings.Serializer.Serialize(Execute(seed, failureTick - 1, recordFingerprints: false).State)
+                ? settings.Serializer.Serialize(Execute(seed, failureTick - 1, recordFingerprints: false, selection).State)
                 : settings.Serializer.Serialize(settings.StateFactory()),
             () => settings.Serializer.Serialize(failedState));
 
@@ -212,9 +270,16 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             _ => result.LastTick
         };
 
-    private static string ReproCode(ulong seed, long tick, FuzzFailureKind kind)
+    private long ReproTicks(long failureTick)
+        => settings.Commands is null ? failureTick : settings.EndTick;
+
+    private string ReproCode(ulong seed, long tick, FuzzFailureKind kind, IReadOnlyList<int>? selection)
     {
-        var code = $".Seeds({seed}, {seed}).Ticks({tick})";
+        var code = $".Seeds({seed}, {seed}).Ticks({ReproTicks(tick)})";
+
+        if (selection is not null)
+            code += $".OnlyCommands([{string.Join(", ", selection)}])";
+
         return kind == FuzzFailureKind.NonDeterminism ? $"{code}.CheckDeterminism(true)" : code;
     }
 }

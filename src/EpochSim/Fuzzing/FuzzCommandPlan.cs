@@ -20,6 +20,7 @@ public sealed class FuzzCommandPlan
     public long EndTick { get; }
     public IRng Rng { get; }
 
+    internal int Count => _entries.Count;
     internal bool IsEmpty => _entries.Count == 0;
 
     public void Enqueue(long tick, ICommand command)
@@ -31,11 +32,19 @@ public sealed class FuzzCommandPlan
         _entries.Add((tick, command));
     }
 
-    internal void ScheduleInto(ScheduledCommandInbox inbox)
+    internal void ScheduleInto(ScheduledCommandInbox inbox, IReadOnlySet<int>? selection)
     {
-        foreach (var (tick, command) in _entries)
-            inbox.Enqueue(tick, command);
+        for (var index = 0; index < _entries.Count; index++)
+        {
+            if (selection is null || selection.Contains(index))
+                inbox.Enqueue(_entries[index].Tick, _entries[index].Command);
+        }
     }
+
+    internal IReadOnlyList<FuzzCommandRef> Describe(IReadOnlyList<int> indices)
+        => indices
+            .Select(index => new FuzzCommandRef(index, _entries[index].Tick, _entries[index].Command.GetType().Name))
+            .ToArray();
 
     private static ulong SplitMix64(ulong value)
     {

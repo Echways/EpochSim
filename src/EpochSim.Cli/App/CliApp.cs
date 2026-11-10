@@ -106,7 +106,7 @@ public sealed class CliApp
         Console.WriteLine("  list-runs <artifactsRoot> [limit]");
         Console.WriteLine("  inspect-run <artifactsRoot> <runId>");
         Console.WriteLine("  repro <artifactsRoot> [runId] [failureTick] [seedOverride]");
-        Console.WriteLine("  fuzz [--adapter name] [--seeds A..B] [--ticks N] [--check-determinism] [--parallel N] [--out dir]");
+        Console.WriteLine("  fuzz [--adapter name] [--seeds A..B] [--ticks N] [--check-determinism] [--parallel N] [--out dir] [--no-shrink]");
         Console.WriteLine("  list-adapters");
         Console.WriteLine();
         Console.WriteLine("Pass --help to any command for detailed usage.");

@@ -84,6 +84,17 @@ public sealed class FuzzCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Fuzz_NoShrinkOption_IsAcceptedAndDocumented()
+    {
+        var (rc, output) = await RunCli("fuzz", "--adapter", "fuzzbug", "--seeds", "4", "--ticks", "426", "--no-shrink", "--out", _out);
+        var (_, help) = await RunCli("fuzz", "--help");
+
+        Assert.Equal(2, rc);
+        Assert.Contains("seed=4 tick=426", output, StringComparison.Ordinal);
+        Assert.Contains("--no-shrink", help, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ListAdapters_IncludesFuzzBug()
     {
         var (rc, output) = await RunCli("list-adapters");

@@ -20,6 +20,9 @@ public sealed class FuzzBuilder<TState>
     private string? _artifactsRoot;
     private IEventCodecV2? _eventCodec;
     private IProgress<FuzzProgress>? _progress;
+    private bool? _shrink;
+    private IReadOnlyList<int>? _onlyCommands;
+    private FuzzShrinkBudget _shrinkBudget = FuzzShrinkBudget.Default;
 
     internal FuzzBuilder()
     {
@@ -113,6 +116,31 @@ public sealed class FuzzBuilder<TState>
         return this;
     }
 
+    public FuzzBuilder<TState> Shrink(bool enabled = true)
+    {
+        _shrink = enabled;
+        return this;
+    }
+
+    public FuzzBuilder<TState> OnlyCommands(IReadOnlyList<int> indices)
+    {
+        ArgumentNullException.ThrowIfNull(indices);
+
+        foreach (var index in indices)
+            ArgumentOutOfRangeException.ThrowIfNegative(index, nameof(indices));
+
+        _onlyCommands = indices.Distinct().Order().ToArray();
+        return this;
+    }
+
+    internal FuzzBuilder<TState> ShrinkBudget(int maxAttempts, TimeSpan timeLimit)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxAttempts);
+        ArgumentOutOfRangeException.ThrowIfLessThan(timeLimit, TimeSpan.Zero);
+        _shrinkBudget = new FuzzShrinkBudget(maxAttempts, timeLimit);
+        return this;
+    }
+
     internal FuzzSettings<TState> Build()
         => new(
             _stateFactory ?? throw MissingParameter(nameof(State)),
@@ -127,7 +155,10 @@ public sealed class FuzzBuilder<TState>
             _stopAtFirstFailure,
             _artifactsRoot,
             _eventCodec,
-            _progress);
+            _progress,
+            _shrink ?? _commands is not null,
+            _onlyCommands,
+            _shrinkBudget);
 
     private static InvalidOperationException MissingParameter(string name)
         => new($"Epoch.Fuzz requires {name}(...) to be configured.");
