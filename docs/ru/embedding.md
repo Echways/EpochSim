@@ -7,15 +7,37 @@
 `RunTicks` выполняет ограниченный batch-прогон:
 
 ```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
 engine.RunTicks(state, seed: 1, endTickInclusive: 10_000);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 `CreateSession` подходит для долгоживущих приложений: серверов, игр и интерактивных инструментов:
 
 ```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
 using var session = engine.CreateSession(state, seed: 1, startTick: 0);
 session.TickOnce();
 session.RunUntil(1_000);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Сессия сохраняет непрерывность генератора случайных чисел и планировщика между вызовами `TickOnce`. См. [Sessions](sessions.md).
@@ -29,12 +51,19 @@ session.RunUntil(1_000);
 Минимальной интеграции не нужны ни кодек, ни события:
 
 ```csharp
+using EpochSim;
+
 var state = new WorldState();
 var engine = Epoch.CreateEngine<WorldState>();
 engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
 using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 run.RunTicks(engine, seed: 1, endTickInclusive: 100);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Запускайте через `run.RunTicks(engine, ...)`, чтобы использовался тот state, с которым создан run scope. Другой экземпляр, переданный тому же движку, приведёт к ошибке несоответствия state.
@@ -64,6 +93,14 @@ engine.Attach(run);
 using var session = engine.CreateSession(state, seed: 1, startTick: 0);
 inbox.Enqueue(new AddPopulation(5));
 session.TickOnce();
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ### Сервер с отложенным вводом
@@ -86,6 +123,14 @@ scheduledInbox.Enqueue(10, new AddPopulation(3));
 scheduledInbox.Enqueue(11, new AddPopulation(1));
 
 session.RunUntil(20);
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Порядок `ScheduledCommandInbox` детерминирован: сначала тик по возрастанию, затем порядок добавления внутри тика.
@@ -109,6 +154,27 @@ session.RunUntil(20);
 - проверку инвариантов каждый тик, если переданы инварианты
 
 Включайте лог событий только когда нужны replay или bisect. Для явного управления кодеком, идентификатором прогона и отдельными артефактами используйте `Epoch.RecommendedRun(state, codec, serializer, ...)` или `EpochSimRun.For(state)`.
+
+### Mutation guard
+
+`DebugRun` сериализует state до и после каждой системы и бросает `InvalidOperationException`, если fingerprint изменился. Он находит системы, меняющие state вне обработчиков событий, но заметно замедляет прогон: используйте его только в `DebugRun`. Система ниже меняет `Population` напрямую, поэтому `DebugRun` отклоняет её, называя тик и систему:
+
+<!-- snippet: throws InvalidOperationException -->
+```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
+using var debug = Epoch.DebugRun(state, rootDir: "artifacts");
+debug.RunTicks(engine, seed: 1, endTickInclusive: 200);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
+```
 
 ## Отладка детерминизма
 

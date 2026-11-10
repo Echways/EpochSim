@@ -15,12 +15,20 @@ public sealed partial class DocumentationSnippetTests : IDisposable
         "global using System; global using System.Collections.Generic; global using System.IO; " +
         "global using System.Linq; global using System.Threading; global using System.Threading.Tasks;";
 
+    private static readonly string[] Topics = ["artifacts", "determinism", "embedding", "fuzzing", "sessions", "testing"];
+
     private static readonly string[] Documents =
     [
         "README.md",
         "README.ru.md",
-        "docs/en/fuzzing.md",
-        "docs/ru/fuzzing.md"
+        .. Topics.Select(topic => $"docs/en/{topic}.md"),
+        .. Topics.Select(topic => $"docs/ru/{topic}.md")
+    ];
+
+    private static readonly (string English, string Russian)[] Translations =
+    [
+        ("README.md", "README.ru.md"),
+        .. Topics.Select(topic => ($"docs/en/{topic}.md", $"docs/ru/{topic}.md"))
     ];
 
     private readonly string _workingDirectory = Path.Combine(Path.GetTempPath(), $"epochsim-snippet-{Guid.NewGuid():N}");
@@ -51,18 +59,27 @@ public sealed partial class DocumentationSnippetTests : IDisposable
         return data;
     }
 
-    [Fact]
-    public void EveryDocumentHasSnippets()
+    public static TheoryData<string, string> TranslationPairs()
     {
-        foreach (var document in Documents)
-            Assert.NotEmpty(ReadSnippets(document));
+        var data = new TheoryData<string, string>();
+
+        foreach (var (english, russian) in Translations)
+            data.Add(english, russian);
+
+        return data;
     }
 
-    [Fact]
-    public void EnglishAndRussianDocumentsHaveTheSameNumberOfSnippets()
+    [Theory]
+    [MemberData(nameof(TranslationPairs))]
+    public void EnglishAndRussianDocumentsHaveTheSameSnippets(string english, string russian)
     {
-        Assert.Equal(ReadSnippets("README.md").Count, ReadSnippets("README.ru.md").Count);
-        Assert.Equal(ReadSnippets("docs/en/fuzzing.md").Count, ReadSnippets("docs/ru/fuzzing.md").Count);
+        var englishSnippets = ReadSnippets(english);
+        var russianSnippets = ReadSnippets(russian);
+
+        Assert.Equal(englishSnippets.Count, russianSnippets.Count);
+        Assert.Equal(
+            englishSnippets.Select(snippet => (snippet.ExpectedException, snippet.CompileOnly)),
+            russianSnippets.Select(snippet => (snippet.ExpectedException, snippet.CompileOnly)));
     }
 
     [Theory]
@@ -71,6 +88,9 @@ public sealed partial class DocumentationSnippetTests : IDisposable
     {
         var snippet = ReadSnippets(document).Single(candidate => candidate.Number == number);
         var assembly = Compile(snippet, document);
+
+        if (snippet.CompileOnly)
+            return;
 
         var entryPoint = assembly.EntryPoint
                          ?? throw new Xunit.Sdk.XunitException($"{document} snippet #{number} has no top-level statements to run.");
@@ -147,7 +167,9 @@ public sealed partial class DocumentationSnippetTests : IDisposable
             $"Snippet{Guid.NewGuid():N}",
             [CSharpSyntaxTree.ParseText(snippet.Code, options), CSharpSyntaxTree.ParseText(ImplicitUsings, options)],
             references,
-            new CSharpCompilationOptions(OutputKind.ConsoleApplication, nullableContextOptions: NullableContextOptions.Enable));
+            new CSharpCompilationOptions(
+                snippet.CompileOnly ? OutputKind.DynamicallyLinkedLibrary : OutputKind.ConsoleApplication,
+                nullableContextOptions: NullableContextOptions.Enable));
 
         using var stream = new MemoryStream();
         var result = compilation.Emit(stream);
@@ -172,7 +194,8 @@ public sealed partial class DocumentationSnippetTests : IDisposable
             snippets.Add(new Snippet(
                 snippets.Count + 1,
                 string.Join(Environment.NewLine, lines[(i + 1)..end]),
-                marker.Success ? marker.Groups["exception"].Value : null));
+                marker.Success && marker.Groups["exception"].Success ? marker.Groups["exception"].Value : null,
+                marker.Success && marker.Groups["compiles"].Success));
             i = end;
         }
 
@@ -189,8 +212,8 @@ public sealed partial class DocumentationSnippetTests : IDisposable
         return directory?.FullName ?? throw new DirectoryNotFoundException("EpochSim.slnx was not found above the test binaries.");
     }
 
-    [GeneratedRegex(@"^<!-- snippet: throws (?<exception>\w+) -->$")]
+    [GeneratedRegex(@"^<!-- snippet: (?:throws (?<exception>\w+)|(?<compiles>compiles)) -->$")]
     private static partial Regex ExpectationMarker();
 
-    private sealed record Snippet(int Number, string Code, string? ExpectedException);
+    private sealed record Snippet(int Number, string Code, string? ExpectedException, bool CompileOnly);
 }

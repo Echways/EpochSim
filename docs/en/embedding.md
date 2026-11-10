@@ -7,15 +7,37 @@ Integrating EpochSim into an application: execution model, external input and di
 `RunTicks` executes a bounded batch run:
 
 ```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
 engine.RunTicks(state, seed: 1, endTickInclusive: 10_000);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 `CreateSession` serves long-lived applications such as servers, games and interactive tools:
 
 ```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
 using var session = engine.CreateSession(state, seed: 1, startTick: 0);
 session.TickOnce();
 session.RunUntil(1_000);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 A session keeps random number generator and scheduler continuity across `TickOnce` calls. See [Sessions](sessions.md).
@@ -29,12 +51,19 @@ A session keeps random number generator and scheduler continuity across `TickOnc
 Minimal integration needs no codec and no events:
 
 ```csharp
+using EpochSim;
+
 var state = new WorldState();
 var engine = Epoch.CreateEngine<WorldState>();
 engine.AddSystem("World", tick: ctx => ctx.State.Population++);
 
 using var run = Epoch.QuickRun(state, rootDir: "artifacts");
 run.RunTicks(engine, seed: 1, endTickInclusive: 100);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Run through `run.RunTicks(engine, ...)` so the state is the one the run scope was built with. A different instance attached to the same engine fails with a state mismatch error.
@@ -64,6 +93,14 @@ engine.Attach(run);
 using var session = engine.CreateSession(state, seed: 1, startTick: 0);
 inbox.Enqueue(new AddPopulation(5));
 session.TickOnce();
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ### Server with scheduled input
@@ -86,6 +123,14 @@ scheduledInbox.Enqueue(10, new AddPopulation(3));
 scheduledInbox.Enqueue(11, new AddPopulation(1));
 
 session.RunUntil(20);
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 `ScheduledCommandInbox` order is deterministic: tick ascending, then insertion order within a tick.
@@ -109,6 +154,27 @@ session.RunUntil(20);
 - invariant checks every tick, when invariants are supplied
 
 Enable the event log only when replay or bisect is needed. For explicit control over the codec, run identifier and individual artifacts use `Epoch.RecommendedRun(state, codec, serializer, ...)` or `EpochSimRun.For(state)`.
+
+### Mutation guard
+
+`DebugRun` serializes the state before and after each system and throws `InvalidOperationException` when the fingerprint changes. It finds systems that mutate state outside event handlers, at a significant serialization cost: use it in `DebugRun` only. The system below changes `Population` directly, so `DebugRun` rejects it with the tick and the system name:
+
+<!-- snippet: throws InvalidOperationException -->
+```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
+using var debug = Epoch.DebugRun(state, rootDir: "artifacts");
+debug.RunTicks(engine, seed: 1, endTickInclusive: 200);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
+```
 
 ## Debugging determinism
 

@@ -25,6 +25,7 @@ dotnet add package EpochSim.Testing
 
 ## xUnit
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using Xunit;
@@ -41,10 +42,16 @@ public sealed class WorldTests
             .Ticks(200));
     }
 }
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ## NUnit
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using NUnit.Framework;
@@ -61,10 +68,16 @@ public sealed class WorldTests
             .Ticks(200));
     }
 }
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ## MSTest
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -81,6 +94,11 @@ public sealed class WorldTests
             .Seeds(1, 50)
             .Ticks(200));
     }
+}
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
 }
 ```
 
@@ -104,13 +122,20 @@ Fuzz failed: Failures=1, SeedsRun=50, ElapsedMs=12
 `MatchesGolden` это регрессионный тест на случай «я случайно изменил поведение»:
 
 ```csharp
+using EpochSim.Testing;
+
 SimAssert.MatchesGolden<WorldState>(
     f => f
         .State(() => new WorldState())
-        .Engine(e => e.AddSystem(new WorldSystem()))
+        .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
         .Ticks(1000),
     goldenPath: "golden/world-seed-7.json",
     seed: 7);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Первый запуск создаёт файл. В нём fingerprint'ы состояния этого seed на каждом сотом тике и на последнем. Следующие запуски сравниваются с файлом и называют первый тик, на котором есть расхождение. После намеренного изменения запустите тесты один раз с `EPOCHSIM_UPDATE_GOLDEN=1`, чтобы перезаписать файл, и закоммитьте его.

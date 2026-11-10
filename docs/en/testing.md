@@ -25,6 +25,7 @@ It is a test dependency and is not part of `EpochSim.All`.
 
 ## xUnit
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using Xunit;
@@ -41,10 +42,16 @@ public sealed class WorldTests
             .Ticks(200));
     }
 }
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ## NUnit
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using NUnit.Framework;
@@ -61,10 +68,16 @@ public sealed class WorldTests
             .Ticks(200));
     }
 }
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 ## MSTest
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -81,6 +94,11 @@ public sealed class WorldTests
             .Seeds(1, 50)
             .Ticks(200));
     }
+}
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
 }
 ```
 
@@ -104,13 +122,20 @@ The first line is the totals. Each block gives the failure kind, the seed, the t
 `MatchesGolden` is a regression test for "I changed behavior by accident":
 
 ```csharp
+using EpochSim.Testing;
+
 SimAssert.MatchesGolden<WorldState>(
     f => f
         .State(() => new WorldState())
-        .Engine(e => e.AddSystem(new WorldSystem()))
+        .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
         .Ticks(1000),
     goldenPath: "golden/world-seed-7.json",
     seed: 7);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 The first run writes the file. It holds the state fingerprints of the seed on every 100th tick and on the last tick. Later runs compare against it and name the first tick that differs. After an intended change, run the tests once with `EPOCHSIM_UPDATE_GOLDEN=1` to rewrite the file and commit it.
