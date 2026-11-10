@@ -138,6 +138,7 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             return null;
 
         var (kind, summary) = Describe(error);
+        var identity = FuzzFailureIdentity.Of(error);
         var tick = error is InvariantViolationException violation ? violation.Time.Tick : result.LastTick;
 
         return new FuzzFailure(
@@ -149,7 +150,9 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             ArtifactsDir: null,
             ReproCode(seed, tick, kind, selection))
         {
-            ReproTicks = ReproTicks(tick)
+            ReproTicks = ReproTicks(tick),
+            Identity = identity.Name,
+            Signature = FailureSignature.Of(identity)
         };
     }
 
@@ -210,6 +213,8 @@ internal sealed class FuzzSeedRunner<TState>(FuzzSettings<TState> settings)
             ReproCode(seed, tick, FuzzFailureKind.NonDeterminism, settings.OnlyCommands))
         {
             ReproTicks = ReproTicks(tick),
+            Identity = FuzzFailureIdentity.NonDeterminism.Name,
+            Signature = FailureSignature.Of(FuzzFailureIdentity.NonDeterminism),
             ShrinkSkipReason = ShrinkSkipReasonFor(seed)
         };
     }

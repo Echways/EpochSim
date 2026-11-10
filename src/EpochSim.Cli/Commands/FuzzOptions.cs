@@ -10,7 +10,8 @@ internal sealed record FuzzOptions(
     bool CheckDeterminism,
     int? Parallelism,
     string OutputDirectory,
-    bool Shrink)
+    bool Shrink,
+    string? StorePath)
 {
     private const ulong DefaultFromSeed = 1;
     private const ulong DefaultToSeed = 1000;
@@ -19,7 +20,7 @@ internal sealed record FuzzOptions(
 
     public static FuzzOptions Parse(string[] args)
     {
-        var options = new FuzzOptions(null, DefaultFromSeed, DefaultToSeed, DefaultTicks, false, null, DefaultOutputDirectory, true);
+        var options = new FuzzOptions(null, DefaultFromSeed, DefaultToSeed, DefaultTicks, false, null, DefaultOutputDirectory, true, null);
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -34,6 +35,7 @@ internal sealed record FuzzOptions(
                 "--parallel" => options with { Parallelism = ParseParallelism(ReadValue(args, ref i, option)) },
                 "--out" => options with { OutputDirectory = ReadValue(args, ref i, option) },
                 "--no-shrink" => options with { Shrink = false },
+                "--store" => options with { StorePath = ReadValue(args, ref i, option) },
                 _ => throw new ArgumentException($"Unknown argument '{args[i]}'. Run 'fuzz --help' for usage.")
             };
         }

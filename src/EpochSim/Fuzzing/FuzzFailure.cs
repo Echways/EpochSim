@@ -19,11 +19,14 @@ public sealed record FuzzFailure(
     public bool ShrinkBudgetExhausted { get; init; }
     public string? ShrinkSkipReason { get; init; }
     public long ReproTicks { get; init; }
+    public string Identity { get; init; } = string.Empty;
+    public string Signature { get; init; } = string.Empty;
+    public bool IsKnown { get; init; }
 
     public string ToText()
     {
         var text = new StringBuilder();
-        text.Append('[').Append(Kind).Append("] seed=").Append(Seed).Append(" tick=").Append(Tick).AppendLine();
+        text.Append('[').Append(Kind).Append("] seed=").Append(Seed).Append(" tick=").Append(Tick).Append(IsKnown ? " (known)" : string.Empty).AppendLine();
         text.Append("  ").AppendLine(Summary);
 
         AppendShrink(text);

@@ -20,7 +20,10 @@ internal static class FuzzRunner
         var failureCount = 0;
 
         var options = new ParallelOptions { MaxDegreeOfParallelism = settings.Parallelism };
-        var seeds = Partitioner.Create(settings.Seeds, EnumerablePartitionerOptions.NoBuffering);
+        var stored = settings.Store?.Load().Where(entry => entry.Name == settings.Name).ToArray() ?? [];
+        var storedSeeds = stored.SelectMany(entry => entry.AllSeeds).ToHashSet();
+        var passedStoredSeeds = new ConcurrentDictionary<ulong, byte>();
+        var seeds = Partitioner.Create(StoredSeedsFirst(storedSeeds, settings.Seeds), EnumerablePartitionerOptions.NoBuffering);
 
         try
         {
@@ -28,6 +31,9 @@ internal static class FuzzRunner
             {
                 var failure = runner.Check(seed);
                 var completed = Interlocked.Increment(ref seedsRun);
+
+                if (failure is null && storedSeeds.Contains(seed))
+                    passedStoredSeeds[seed] = 0;
 
                 if (failure is not null)
                 {
@@ -46,7 +52,19 @@ internal static class FuzzRunner
             ExceptionDispatchInfo.Capture(aggregate.InnerExceptions[0]).Throw();
         }
 
-        var ordered = failures.OrderBy(failure => failure.Seed).ToList();
+        var knownSignatures = stored.Where(entry => !entry.Fixed).Select(entry => entry.Signature).ToHashSet();
+        var ordered = failures
+            .Select(failure => failure with { IsKnown = knownSignatures.Contains(failure.Signature) })
+            .OrderBy(failure => failure.Seed)
+            .ToList();
+        var newlyFixed = new List<ulong>();
+
+        if (settings.Store is { } store)
+        {
+            var merge = new FailureStoreMerge<TState>(settings, TimeProvider.System);
+            var passed = passedStoredSeeds.Keys.ToHashSet();
+            store.Update(current => merge.Apply(current, ordered, passed, newlyFixed));
+        }
 
         if (settings.ArtifactsRoot is not null)
         {
@@ -55,6 +73,11 @@ internal static class FuzzRunner
         }
 
         stopwatch.Stop();
-        return new FuzzReport(seedsRun, stopwatch.Elapsed, ordered);
+        return new FuzzReport(seedsRun, stopwatch.Elapsed, ordered, newlyFixed, settings.Store is not null);
     }
+
+    private static IEnumerable<ulong> StoredSeedsFirst(IReadOnlySet<ulong> storedSeeds, IEnumerable<ulong> seeds)
+        => storedSeeds.Count == 0
+            ? seeds
+            : storedSeeds.Order().Concat(seeds.Where(seed => !storedSeeds.Contains(seed)));
 }

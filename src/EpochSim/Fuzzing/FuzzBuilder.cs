@@ -23,6 +23,8 @@ public sealed class FuzzBuilder<TState>
     private bool? _shrink;
     private IReadOnlyList<int>? _onlyCommands;
     private FuzzShrinkBudget _shrinkBudget = FuzzShrinkBudget.Default;
+    private string? _name;
+    private string? _storePath;
 
     internal FuzzBuilder()
     {
@@ -133,6 +135,28 @@ public sealed class FuzzBuilder<TState>
         return this;
     }
 
+    public FuzzBuilder<TState> Name(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _name = name;
+        return this;
+    }
+
+    public FuzzBuilder<TState> FailureStore(string? path = null)
+    {
+        if (path is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        _storePath = path ?? FuzzFailureStore.DefaultPath;
+        return this;
+    }
+
+    internal FuzzBuilder<TState> WithoutFailureStore()
+    {
+        _storePath = null;
+        return this;
+    }
+
     internal FuzzBuilder<TState> ShrinkBudget(int maxAttempts, TimeSpan timeLimit)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxAttempts);
@@ -158,7 +182,10 @@ public sealed class FuzzBuilder<TState>
             _progress,
             _shrink ?? _commands is not null,
             _onlyCommands,
-            _shrinkBudget);
+            _shrinkBudget,
+            _name ?? typeof(TState).FullName ?? typeof(TState).Name,
+            TypeDisplayName.Of(typeof(TState)),
+            _storePath is null ? null : new FuzzFailureStore(_storePath));
 
     private static InvalidOperationException MissingParameter(string name)
         => new($"Epoch.Fuzz requires {name}(...) to be configured.");

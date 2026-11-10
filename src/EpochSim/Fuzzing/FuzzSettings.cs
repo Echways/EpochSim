@@ -21,4 +21,7 @@ internal sealed record FuzzSettings<TState>(
     IProgress<FuzzProgress>? Progress,
     bool Shrink,
     IReadOnlyList<int>? OnlyCommands,
-    FuzzShrinkBudget ShrinkBudget);
+    FuzzShrinkBudget ShrinkBudget,
+    string Name,
+    string StateType,
+    FuzzFailureStore? Store);

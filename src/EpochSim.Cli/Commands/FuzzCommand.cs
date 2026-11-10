@@ -10,7 +10,7 @@ public sealed class FuzzCommand : ICliCommand
 
     public string Help =>
         """
-        fuzz [--adapter name] [--seeds A..B] [--ticks N] [--check-determinism] [--parallel N] [--out dir] [--no-shrink]
+        fuzz [--adapter name] [--seeds A..B] [--ticks N] [--check-determinism] [--parallel N] [--out dir] [--no-shrink] [--store path]
 
         Run the adapter's simulation over a range of seeds and report invariant violations,
         exceptions and non-determinism. Returns exit code 2 when a failure is found, 0 otherwise.
@@ -22,6 +22,7 @@ public sealed class FuzzCommand : ICliCommand
           --parallel N           Concurrent runs (default: processor count)
           --out dir              Artifacts directory for failed seeds (default: artifacts)
           --no-shrink            Keep the full command plan of a failed seed instead of minimizing it
+          --store path           Record failures in a failure store and replay its seeds first (see failures --help)
         """;
 
     public int Execute(CommandContext ctx, string[] args)
@@ -48,9 +49,15 @@ public sealed class FuzzCommand : ICliCommand
 
             if (options.Parallelism is { } degree)
                 fuzz.Parallelism(degree);
+
+            if (options.StorePath is { } storePath)
+                fuzz.Name(adapter.Name).FailureStore(storePath);
         });
 
         Console.WriteLine($"SeedsRun={report.SeedsRun} Failures={report.Failures.Count} ElapsedMs={(long)report.Duration.TotalMilliseconds}");
+
+        foreach (var seed in report.FixedSeeds)
+            Console.WriteLine($"Previously failing seed {seed} now passes.");
 
         foreach (var failure in report.Failures)
         {
