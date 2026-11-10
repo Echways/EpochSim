@@ -18,6 +18,7 @@ internal static class SimulationSource
         using System.Threading;
         using System.Threading.Tasks;
         using EpochSim.Execution;
+        using EpochSim.Fuzzing;
         using EpochSim.Kernel.Determinism;
         using EpochSim.Kernel.Messaging;
         using EpochSim.Kernel.Systems;
@@ -59,6 +60,28 @@ internal static class SimulationSource
                 public static void Configure(SimulationEngine<S> engine)
                 {
                     engine.OnCommand<Cmd>((state, command, events) => { {{StatementMarker}} });
+                }
+            }
+            """.Replace(StatementMarker, statements);
+
+    public static string StepLambda(string statements)
+        => Usings + $$"""
+            public static class Host
+            {
+                public static void Configure(FuzzBuilder<S> fuzz)
+                {
+                    fuzz.Step((state, ctx) => { {{StatementMarker}} });
+                }
+            }
+            """.Replace(StatementMarker, statements);
+
+    public static string InvariantLambda(string statements)
+        => Usings + $$"""
+            public static class Host
+            {
+                public static void Configure(FuzzBuilder<S> fuzz)
+                {
+                    fuzz.Invariant("inv", state => { {{StatementMarker}} return true; });
                 }
             }
             """.Replace(StatementMarker, statements);
@@ -136,6 +159,8 @@ internal static class SimulationSource
     [
         Lambda,
         OnCommandLambda,
+        StepLambda,
+        InvariantLambda,
         SystemClass,
         InvariantClass,
         CommandHandlerClass,

@@ -9,6 +9,7 @@ namespace EpochSim.Analyzers;
 internal sealed class SimulationScope
 {
     private readonly INamedTypeSymbol? _engine;
+    private readonly INamedTypeSymbol? _fuzzBuilder;
     private readonly INamedTypeSymbol? _system;
     private readonly INamedTypeSymbol? _commandHandler;
     private readonly INamedTypeSymbol? _invariant;
@@ -18,6 +19,7 @@ internal sealed class SimulationScope
     private SimulationScope(Compilation compilation)
     {
         _engine = compilation.GetTypeByMetadataName("EpochSim.Execution.SimulationEngine`1");
+        _fuzzBuilder = compilation.GetTypeByMetadataName("EpochSim.Fuzzing.FuzzBuilder`1");
         _system = compilation.GetTypeByMetadataName("EpochSim.Kernel.Systems.ISystem`1");
         _commandHandler = compilation.GetTypeByMetadataName("EpochSim.Kernel.Messaging.ICommandHandler`2");
         _invariant = compilation.GetTypeByMetadataName("EpochSim.Kernel.Validation.IInvariant`1");
@@ -31,13 +33,20 @@ internal sealed class SimulationScope
     }
 
     private bool IsRelevant
-        => _engine is not null || _system is not null || _commandHandler is not null
+        => _engine is not null || _fuzzBuilder is not null || _system is not null || _commandHandler is not null
            || _invariant is not null || _deterministic is not null;
 
     public bool IsRegistration(IMethodSymbol method)
-        => _engine is not null
-           && SymbolEqualityComparer.Default.Equals(method.ContainingType?.OriginalDefinition, _engine)
-           && method.Name is "AddSystem" or "OnCommand";
+    {
+        var owner = method.ContainingType?.OriginalDefinition;
+
+        return (_engine is not null
+                && SymbolEqualityComparer.Default.Equals(owner, _engine)
+                && method.Name is "AddSystem" or "OnCommand")
+               || (_fuzzBuilder is not null
+                   && SymbolEqualityComparer.Default.Equals(owner, _fuzzBuilder)
+                   && method.Name is "Step" or "Invariant");
+    }
 
     public bool IsSimulationCode(IOperation operation, ISymbol containingSymbol)
     {
