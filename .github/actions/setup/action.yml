@@ -1,0 +1,39 @@
+name: Setup .NET
+description: Install the SDK pinned by global.json, warm the NuGet cache and restore.
+
+inputs:
+  solution:
+    required: false
+    default: EpochSim.slnx
+  restore:
+    required: false
+    default: 'true'
+  cache:
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        {
+          echo "NUGET_PACKAGES=${GITHUB_WORKSPACE}/.nuget/packages"
+          echo "DOTNET_NOLOGO=true"
+          echo "DOTNET_CLI_TELEMETRY_OPTOUT=true"
+        } >> "$GITHUB_ENV"
+
+    - uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+
+    - if: inputs.cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ github.workspace }}/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '**/*.csproj', '**/*.props', 'global.json') }}
+        restore-keys: nuget-${{ runner.os }}-
+
+    - if: inputs.restore == 'true'
+      shell: bash
+      run: dotnet restore "${{ inputs.solution }}"
