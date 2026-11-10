@@ -11,6 +11,66 @@ EpochSim гарантирует детерминированное выполн�
 - гонки потоков, меняющие порядок событий
 - неконтролируемое поведение с плавающей точкой
 
+## Анализатор
+
+В `EpochSim` входит Roslyn-анализатор, превращающий эти ошибки в предупреждения компилятора. Он лежит в пакете `EpochSim` и доступен отдельно как `EpochSim.Analyzers`. Анализатор срабатывает только внутри кода симуляции и не трогает остальной проект.
+
+### Что считается кодом симуляции
+
+- Лямбды и методовые группы, переданные в `SimulationEngine<TState>.AddSystem(...)` и `OnCommand(...)`.
+- Все методы типов, реализующих `ISystem<>`, `ICommandHandler<,>` или `IInvariant<>`.
+- Типы и методы с атрибутом `[Deterministic]` (`EpochSim.Kernel.Determinism`).
+
+Вызовы в другие методы не отслеживаются. Пометьте вспомогательный метод `[Deterministic]`, чтобы проверить и его.
+
+```csharp
+using EpochSim.Kernel.Determinism;
+
+[Deterministic]
+public static class Pricing
+{
+    public static int Roll(IRng rng) => rng.NextInt(1, 7);
+}
+```
+
+### Правила
+
+| ID      | Серьёзность по умолчанию | Что ловит                                                                                                          |
+| ------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| ESIM001 | warning                  | `DateTime.Now/UtcNow/Today`, `DateTimeOffset.Now/UtcNow`, `Stopwatch`, `Environment.TickCount/TickCount64`, `TimeProvider.System` |
+| ESIM002 | warning                  | `new Random(...)`, `Random.Shared`, `RandomNumberGenerator`, `Guid.NewGuid()`                                      |
+| ESIM003 | warning                  | `Task.Run`, `Task.Factory.StartNew`, `new Thread`, `ThreadPool.*`, `Parallel.*`, `AsParallel()`, `async`-лямбды, `await` |
+| ESIM004 | warning                  | `GetHashCode()` у `string` и `object`, перебор `ConcurrentDictionary`, `ConcurrentBag`, `ConcurrentQueue`          |
+| ESIM005 | warning                  | `File.*`, `Directory.*`, `HttpClient`, `Environment.GetEnvironmentVariable`, `Environment.MachineName`             |
+| ESIM006 | hidden                   | `foreach` и LINQ по `Dictionary<,>` и `HashSet<>`                                                                  |
+
+ESIM006 скрыто по умолчанию: .NET перебирает эти коллекции в стабильном порядке при одинаковых операциях, поэтому код хрупкий, но не неверный. Повышайте серьёзность, когда нужна более строгая проверка.
+
+### Настройка
+
+Через `.editorconfig`:
+
+```ini
+[*.cs]
+dotnet_diagnostic.ESIM001.severity = error
+dotnet_diagnostic.ESIM005.severity = none
+dotnet_diagnostic.ESIM006.severity = warning
+```
+
+Отдельное срабатывание подавляется `#pragma warning disable ESIM001`.
+
+### Исправление
+
+ESIM002 предлагает исправление, когда в области видимости есть параметр `TickContext<>` или `EventContext<>`:
+
+| До                                  | После                      |
+| ----------------------------------- | -------------------------- |
+| `Random.Shared.Next(a, b)`          | `ctx.Rng.NextInt(a, b)`    |
+| `new Random(seed).Next(a, b)`       | `ctx.Rng.NextInt(a, b)`    |
+| `Random.Shared.NextDouble()`        | `ctx.Rng.NextDouble01()`   |
+
+Проверка методовых групп выполняется при анализе всей компиляции (при сборке). В IDE она может появиться только после сборки.
+
 ## Рекомендации
 
 - Используйте только `ctx.Rng` для доменной случайности.

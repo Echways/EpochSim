@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/EpochSim.Analyzers.CodeFixes/EpochSim.Analyzers.CodeFixes.csproj" />
+    <Project Path="src/EpochSim.Analyzers/EpochSim.Analyzers.csproj" />
     <Project Path="src/EpochSim.Cli/EpochSim.Cli.csproj" />
     <Project Path="src/EpochSim.All/EpochSim.All.csproj" />
     <Project Path="src/EpochSim.Execution/EpochSim.Execution.csproj" />
@@ -8,8 +10,10 @@
     <Project Path="src/EpochSim.Observability/EpochSim.Observability.csproj" />
     <Project Path="src/EpochSim.Samples/EpochSim.Samples.csproj" />
     <Project Path="src/EpochSim.Serialization/EpochSim.Serialization.csproj" />
+    <Project Path="src/EpochSim.Testing/EpochSim.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/EpochSim.Analyzers.Tests/EpochSim.Analyzers.Tests.csproj" />
     <Project Path="tests/EpochSim.Determinism.Tests/EpochSim.Determinism.Tests.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">

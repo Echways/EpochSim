@@ -5,7 +5,8 @@ public static class DomainAdapterRegistry
     private static readonly Dictionary<string, IDomainAdapter> Adapters =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["population"] = new PopulationDomainAdapter()
+            ["population"] = new PopulationDomainAdapter(),
+            ["fuzzbug"] = new FuzzBugDomainAdapter()
         };
 
     public static IDomainAdapter Default => Adapters["population"];

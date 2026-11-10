@@ -17,10 +17,11 @@
 
 Симуляцию, которую нельзя воспроизвести, нельзя отладить. EpochSim фиксирует входы каждого тика: один и тот же seed и те же команды всегда дают то же состояние, а расхождение локализуется до одного тика.
 
+- **Поиск seed, на котором ломается логика.** `Epoch.Fuzz` прогоняет симуляцию на тысячах seed, возвращает сбойный seed и тик и показывает, какие поля состояния изменились.
 - **Детерминизм по построению.** Прогон определяется состоянием, seed и упорядоченным входом. Системы выполняются в фиксированном порядке в одном потоке симуляции.
 - **Пресеты запуска.** `QuickRun`, `RecommendedRun` и `DebugRun` закрывают smoke-тесты, диагностику в production и строгий поиск нарушений инвариантов одним вызовом.
 - **Артефакты каждого прогона.** Манифест, fingerprint'ы состояния по тикам и необязательный лог событий пишутся на диск и читаются из кода.
-- **Replay и bisect.** Проверка прогона по записанным fingerprint'ам и поиск первого тика, на котором два прогона расходятся.
+- **Replay и bisect.** Проверка прогона по записанным fingerprint'ам и поиск первого тика, на котором нарушается инвариант.
 - **Детерминированный ввод.** `CommandInbox` и `ScheduledCommandInbox` передают команды из HTTP, UI или очередей в стабильном порядке.
 - **Долгоживущие сессии.** `SimulationSession<TState>` для игр, серверов и пошагового режима.
 - **CLI для всего процесса.** Запуск, список, инспекция, валидация, replay, bisect и воспроизведение прогонов из терминала.
@@ -66,6 +67,58 @@ public sealed class WorldState
 Всегда вызывайте `run.RunTicks(engine, ...)`, а не `engine.RunTicks(state, ...)`: так передаётся тот же state, с которым создан run scope.
 
 Подробнее в [Embedding](docs/ru/embedding.md).
+
+## Поиск багов по seed
+
+`Epoch.Fuzz` прогоняет симуляцию на диапазоне seed и проверяет инварианты, исключения и, по желанию, детерминизм. Каждый сбой приходит с seed, который его воспроизводит, и полями состояния, изменившимися на сбойном тике.
+
+```csharp
+var report = Epoch.Fuzz<JobQueueState>(f => f
+    .State(() => new JobQueueState())
+    .Engine(e => e.AddSystem(new JobQueueSystem()))
+    .Invariants(() => [new QueueNonNegativeInvariant()])
+    .Seeds(1, 1000)
+    .Ticks(500));
+
+report.ThrowIfFailed();
+```
+
+```
+Fuzz failed: Failures=14, SeedsRun=1000, ElapsedMs=81
+
+[InvariantViolation] seed=4 tick=426
+  QueueNonNegative: Pending=-1
+  StateDiff:
+    $.Completed: 198 -> 200
+    $.Pending: 0 -> -1
+  Repro: .Seeds(4, 4).Ticks(426)
+```
+
+Добавьте `.CheckDeterminism()`, чтобы прогонять каждый seed дважды и ловить `static`-состояние, системное время и другие источники недетерминизма. Тот же прогон из терминала:
+
+```bash
+epochsim fuzz --adapter fuzzbug --seeds 1..1000 --ticks 500
+```
+
+Подробнее в [Fuzzing](docs/ru/fuzzing.md).
+
+## Тестирование
+
+`EpochSim.Testing` даёт те же проверки в xUnit, NUnit и MSTest, не завися ни от одного из них:
+
+```bash
+dotnet add package EpochSim.Testing
+```
+
+```csharp
+SimAssert.IsDeterministic<WorldState>(f => f
+    .State(() => new WorldState())
+    .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+    .Seeds(1, 50)
+    .Ticks(200));
+```
+
+Сообщение о сбое называет seed, тик и изменившиеся поля состояния. Подробнее в [Testing](docs/ru/testing.md).
 
 ## Пресеты запуска
 
@@ -181,6 +234,7 @@ epochsim inspect-run artifacts <runId>
 ```bash
 epochsim verify-run artifacts <runId>
 epochsim bisect artifacts <runId>
+epochsim fuzz --adapter fuzzbug --seeds 1..1000
 ```
 
 | Команда                                      | Назначение                                      |
@@ -188,7 +242,8 @@ epochsim bisect artifacts <runId>
 | `init`, `run`                                | Создать стартовое приложение, запустить его     |
 | `list-runs`, `inspect-run`, `pretty-inspect` | Просмотр и инспекция записанных прогонов        |
 | `validate-run`, `verify-run`                 | Проверка артефактов и fingerprint'ов            |
-| `fast-replay`, `bisect`, `repro`             | Replay прогона, поиск первого расхождения       |
+| `fast-replay`, `bisect`, `repro`             | Replay прогона, поиск первого нарушения         |
+| `fuzz`                                       | Прогон многих seed, поиск сбойного              |
 | `event-stats`, `timeline`, `list-adapters`   | Анализ событий и список доступных адаптеров     |
 
 ## Состав
@@ -200,7 +255,10 @@ epochsim bisect artifacts <runId>
 | Ввод          | `CommandInbox`, `ScheduledCommandInbox` со стабильным порядком.                |
 | Артефакты     | Манифест, fingerprint'ы состояния, лог событий, артефакты сбоев, профилирование. |
 | Сериализация  | JSON-сериализатор состояния и кодек сообщений, находимых в сборке.             |
-| Диагностика   | Mutation guard, инварианты, проверка replay, bisect.                           |
+| Диагностика   | Mutation guard, инварианты, проверка replay, bisect, полевой дифф состояния.   |
+| Анализатор    | Roslyn-правила ESIM001-ESIM006 ловят системное время, `Random`, потоки и другое в коде симуляции. |
+| Тестирование  | `EpochSim.Testing`: `SimAssert` для любого тестового фреймворка, золотые fingerprint'ы. |
+| Fuzzing       | `Epoch.Fuzz`: диапазоны seed, инварианты, проверка детерминизма, воспроизводимые сбои. |
 | CLI           | .NET-утилита `epochsim` для всего жизненного цикла прогона.                    |
 
 ## Документация
@@ -211,10 +269,12 @@ epochsim bisect artifacts <runId>
 | [Artifacts](docs/ru/artifacts.md)  | Структура каталога прогона и форматы файлов            |
 | [Sessions](docs/ru/sessions.md)    | Долгоживущие циклы и пошаговый режим                   |
 | [Determinism](docs/ru/determinism.md) | Правила, сохраняющие воспроизводимость прогонов     |
+| [Fuzzing](docs/ru/fuzzing.md)      | Поиск сбойных seed и их воспроизведение                |
+| [Testing](docs/ru/testing.md)      | `SimAssert` для xUnit, NUnit и MSTest                  |
 
 ## Примеры
 
-[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) — минимальная отправная точка. [Population](src/EpochSim.Samples/Population/) — событийный домен с инвариантами и replay.
+[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) — минимальная отправная точка. [Population](src/EpochSim.Samples/Population/) — событийный домен с инвариантами и replay. [Fuzzing](src/EpochSim.Samples/Fuzzing/) — редкий баг, зависящий от seed, для поиска через `Epoch.Fuzz`.
 
 ## Сборка и тесты
 

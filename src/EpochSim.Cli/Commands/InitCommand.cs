@@ -58,7 +58,7 @@ public sealed class InitCommand : ICliCommand
           </PropertyGroup>
 
           <ItemGroup>
-            <PackageReference Include="EpochSim" Version="0.2.2" />
+            <PackageReference Include="EpochSim" Version="0.3.0" />
           </ItemGroup>
 
         </Project>

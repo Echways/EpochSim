@@ -420,3 +420,6 @@ FodyWeavers.xsd
 # Misc
 .idea/
 snapshots/
+
+# Superpowers
+docs/superpowers/

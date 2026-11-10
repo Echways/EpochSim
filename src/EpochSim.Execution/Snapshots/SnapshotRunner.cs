@@ -18,9 +18,10 @@ public static class SnapshotRunner
         long endTick,
         Func<TState> newState,
         RunOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? maxSnapshotTick = null)
     {
-        var snapshotPath = SnapshotLocator.FindBestSnapshot(snapshotsDir, endTick);
+        var snapshotPath = SnapshotLocator.FindBestSnapshot(snapshotsDir, maxSnapshotTick ?? endTick);
 
         TState state;
         long startTick;
