@@ -7,7 +7,7 @@ A deterministic tick engine for .NET 10: fuzz by seed, replay any run, bisect to
 
 **English** · [Русский](README.ru.md)
 
-[![NuGet](https://img.shields.io/nuget/v/EpochSim)](https://www.nuget.org/packages/EpochSim)
+[![NuGet](https://img.shields.io/nuget/v/EpochSim.All)](https://www.nuget.org/packages/EpochSim.All)
 [![CI](https://github.com/Echways/EpochSim/actions/workflows/ci.yml/badge.svg)](https://github.com/Echways/EpochSim/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
