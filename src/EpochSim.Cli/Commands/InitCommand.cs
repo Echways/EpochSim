@@ -1,3 +1,4 @@
+using System.Reflection;
 using EpochSim.Cli.App;
 
 namespace EpochSim.Cli.Commands;
@@ -14,11 +15,12 @@ public sealed class InitCommand : ICliCommand
         {
             ["Program.cs"] = ProgramTemplate,
             ["WorldState.cs"] = WorldStateTemplate,
-            ["SessionInboxExample.cs"] = SessionInboxTemplate
+            ["SessionInboxExample.cs"] = SessionInboxTemplate,
+            ["WorldFuzz.cs"] = WorldFuzzTemplate
         };
 
         if (!Directory.EnumerateFiles(targetDir, "*.csproj").Any())
-            filesToCreate["EpochSim.App.csproj"] = ProjectTemplate;
+            filesToCreate["EpochSim.App.csproj"] = ProjectTemplate();
 
         var existingFiles = filesToCreate.Keys
             .Where(fileName => File.Exists(Path.Combine(targetDir, fileName)))
@@ -47,7 +49,12 @@ public sealed class InitCommand : ICliCommand
         return 0;
     }
 
-    private const string ProjectTemplate = """
+    private static string PackageVersion
+        => Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Split('+')[0];
+
+    private static string ProjectTemplate()
+        => $$"""
         <Project Sdk="Microsoft.NET.Sdk">
 
           <PropertyGroup>
@@ -58,7 +65,7 @@ public sealed class InitCommand : ICliCommand
           </PropertyGroup>
 
           <ItemGroup>
-            <PackageReference Include="EpochSim" Version="0.3.0" />
+            <PackageReference Include="EpochSim" Version="{{PackageVersion}}" />
           </ItemGroup>
 
         </Project>
@@ -79,6 +86,24 @@ public sealed class InitCommand : ICliCommand
         Console.WriteLine($"RunId={run.RunId}");
         Console.WriteLine($"RunDir={run.Paths.RunDir}");
         Console.WriteLine($"Population={state.Population}");
+
+        Console.WriteLine(WorldFuzz.Run().ToText());
+        """;
+
+    private const string WorldFuzzTemplate = """
+        using EpochSim;
+        using EpochSim.Fuzzing;
+
+        public static class WorldFuzz
+        {
+            public static FuzzReport Run()
+                => Epoch.Fuzz<WorldState>(f => f
+                    .State(() => new WorldState())
+                    .Step((world, ctx) => world.Population += ctx.Rng.AsRandom().Next(0, 3))
+                    .Invariant("PopulationNonNegative", world => world.Population >= 0)
+                    .Seeds(1, 1000)
+                    .Ticks(500));
+        }
         """;
 
     private const string WorldStateTemplate = """
