@@ -84,6 +84,34 @@ public sealed class FuzzCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Fuzz_NoShrinkOption_IsAcceptedAndDocumented()
+    {
+        var (rc, output) = await RunCli("fuzz", "--adapter", "fuzzbug", "--seeds", "4", "--ticks", "426", "--no-shrink", "--out", _out);
+        var (_, help) = await RunCli("fuzz", "--help");
+
+        Assert.Equal(2, rc);
+        Assert.Contains("seed=4 tick=426", output, StringComparison.Ordinal);
+        Assert.Contains("--no-shrink", help, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fuzz_WithStore_RecordsFailuresAndMarksTheNextRunAsKnown()
+    {
+        var store = Path.Combine(_out, "epochsim-failures.json");
+
+        var (firstRc, first) = await RunCli("fuzz", "--adapter", "fuzzbug", "--seeds", "1..10", "--ticks", "500", "--store", store, "--out", _out);
+        var (secondRc, second) = await RunCli("fuzz", "--adapter", "fuzzbug", "--seeds", "1..10", "--ticks", "500", "--store", store, "--out", _out);
+
+        Assert.Equal(2, firstRc);
+        Assert.Equal(2, secondRc);
+        Assert.DoesNotContain("(known)", first, StringComparison.Ordinal);
+        Assert.Contains("seed=4 tick=426 (known)", second, StringComparison.Ordinal);
+        var entry = Assert.Single(new EpochSim.Fuzzing.FuzzFailureStore(store).Load());
+        Assert.Equal("fuzzbug", entry.Name);
+        Assert.Equal(4UL, entry.Seed);
+    }
+
+    [Fact]
     public async Task ListAdapters_IncludesFuzzBug()
     {
         var (rc, output) = await RunCli("list-adapters");

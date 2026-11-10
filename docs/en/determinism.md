@@ -23,6 +23,7 @@ EpochSim guarantees deterministic execution for identical inputs: initial state,
 
 Calls into other methods are not followed. Mark a helper with `[Deterministic]` to check it too.
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Kernel.Determinism;
 

@@ -23,6 +23,7 @@ EpochSim гарантирует детерминированное выполн�
 
 Вызовы в другие методы не отслеживаются. Пометьте вспомогательный метод `[Deterministic]`, чтобы проверить и его.
 
+<!-- snippet: compiles -->
 ```csharp
 using EpochSim.Kernel.Determinism;
 

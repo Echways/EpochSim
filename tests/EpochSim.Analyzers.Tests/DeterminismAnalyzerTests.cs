@@ -70,6 +70,8 @@ public sealed partial class DeterminismAnalyzerTests
     {
         ["AddSystem lambda"] = SimulationSource.Lambda,
         ["OnCommand lambda"] = SimulationSource.OnCommandLambda,
+        ["Step lambda"] = SimulationSource.StepLambda,
+        ["Invariant lambda"] = SimulationSource.InvariantLambda,
         ["ISystem"] = SimulationSource.SystemClass,
         ["IInvariant"] = SimulationSource.InvariantClass,
         ["ICommandHandler"] = SimulationSource.CommandHandlerClass,
@@ -86,6 +88,7 @@ public sealed partial class DeterminismAnalyzerTests
         foreach (var statement in statements)
         {
             data.Add("AddSystem lambda", statement);
+            data.Add("Step lambda", statement);
             data.Add("ISystem", statement);
         }
 
@@ -129,6 +132,16 @@ public sealed partial class DeterminismAnalyzerTests
     [MemberData(nameof(EveryConstruct))]
     public Task IgnoresConstructsOutsideSimulationCode(string statement)
         => AnalyzerVerifier.Verify(SimulationSource.Outside(StripMarkup(statement)));
+
+    [Fact]
+    public Task ReportsRandomAndWallClockInsideStepOfAFuzzBuilder()
+        => AnalyzerVerifier.Verify(
+            SimulationSource.StepLambda("var random = {|ESIM002:new Random()|}; var now = {|ESIM001:DateTime.Now|};"));
+
+    [Fact]
+    public Task ReportsRandomInsideInvariantPredicateOfAFuzzBuilder()
+        => AnalyzerVerifier.Verify(
+            SimulationSource.InvariantLambda("var random = {|ESIM002:new Random()|};"));
 
     [Fact]
     public Task ReportsAsyncLambdaAndAwaitInsideSystemLambda()

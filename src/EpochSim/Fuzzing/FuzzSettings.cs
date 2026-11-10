@@ -18,4 +18,10 @@ internal sealed record FuzzSettings<TState>(
     bool StopAtFirstFailure,
     string? ArtifactsRoot,
     IEventCodecV2? EventCodec,
-    IProgress<FuzzProgress>? Progress);
+    IProgress<FuzzProgress>? Progress,
+    bool Shrink,
+    IReadOnlyList<int>? OnlyCommands,
+    FuzzShrinkBudget ShrinkBudget,
+    string Name,
+    string StateType,
+    FuzzFailureStore? Store);
