@@ -18,6 +18,8 @@ It is a test dependency and is not part of `EpochSim.All`.
 | `SimAssert.InvariantsHold<TState>(configure)`       | Invariants, exceptions and, if `configure` enables it, determinism.    |
 | `SimAssert.NoFailures(report)`                      | Throws when a `FuzzReport` has failures.                               |
 | `SimAssert.MatchesGolden<TState>(configure, path, seed)` | Compares fingerprints of one seed with a stored file.             |
+| `SimAssert.Regression<TState>(configure, seed, ticks, commandIndices)` | Replays one recorded failure. Fails while the bug is present. |
+| `SimAssert.StoredFailuresStayFixed<TState>(configure, storePath)` | Replays every failure of the suite recorded in a failure store. |
 
 `configure` is the same builder callback as in `Epoch.Fuzz`. A single seed is `Seeds(s, s)`.
 
@@ -112,3 +114,22 @@ SimAssert.MatchesGolden<WorldState>(
 ```
 
 The first run writes the file. It holds the state fingerprints of the seed on every 100th tick and on the last tick. Later runs compare against it and name the first tick that differs. After an intended change, run the tests once with `EPOCHSIM_UPDATE_GOLDEN=1` to rewrite the file and commit it.
+
+## Regression tests for found bugs
+
+A failure found by `Epoch.Fuzz` with `FailureStore()` is kept in `epochsim-failures.json` (see [Fuzzing](fuzzing.md#failure-store)). Two assertions turn it into a test.
+
+`SimAssert.Regression` replays one seed. It is a thin wrapper over `Epoch.Fuzz`: it applies `configure`, then restricts the run to `Seeds(seed, seed)` and `Ticks(ticks)`, turns shrinking and the failure store off, and applies `OnlyCommands(commandIndices)` when the indices are given. The values to pass are in the `Repro:` line of the report, or generated for you by `epochsim failures export-test`:
+
+```text
+SimAssert.Regression<Inventory>(InventoryFuzz.Configure, 18, 19);
+SimAssert.Regression<AccountState>(AccountFuzz.Configure, 1, 500, [4, 5]);
+```
+
+`SimAssert.StoredFailuresStayFixed` is one test that replays everything the store holds for the suite named by `configure` (`Name(...)`): the recorded scenario of every entry and the other seeds listed in it. It only reads the store and never marks anything as fixed, so it is safe in CI:
+
+```text
+SimAssert.StoredFailuresStayFixed<Inventory>(InventoryFuzz.Configure, "epochsim-failures.json");
+```
+
+A missing store file or a suite without entries passes. When a seed still fails, the exception carries the same report text as any other failed check.

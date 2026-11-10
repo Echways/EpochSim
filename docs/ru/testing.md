@@ -18,6 +18,8 @@ dotnet add package EpochSim.Testing
 | `SimAssert.InvariantsHold<TState>(configure)`       | Инварианты, исключения и, если `configure` включает, детерминизм.      |
 | `SimAssert.NoFailures(report)`                      | Бросает исключение, если в `FuzzReport` есть сбои.                     |
 | `SimAssert.MatchesGolden<TState>(configure, path, seed)` | Сравнивает fingerprint'ы одного seed с сохранённым файлом.        |
+| `SimAssert.Regression<TState>(configure, seed, ticks, commandIndices)` | Перепроигрывает один записанный сбой. Падает, пока баг есть. |
+| `SimAssert.StoredFailuresStayFixed<TState>(configure, storePath)` | Перепроигрывает все сбои набора, записанные в хранилище сбоев. |
 
 `configure` это тот же билдер, что в `Epoch.Fuzz`. Один seed записывается как `Seeds(s, s)`.
 
@@ -112,3 +114,22 @@ SimAssert.MatchesGolden<WorldState>(
 ```
 
 Первый запуск создаёт файл. В нём fingerprint'ы состояния этого seed на каждом сотом тике и на последнем. Следующие запуски сравниваются с файлом и называют первый тик, на котором есть расхождение. После намеренного изменения запустите тесты один раз с `EPOCHSIM_UPDATE_GOLDEN=1`, чтобы перезаписать файл, и закоммитьте его.
+
+## Регрессионные тесты для найденных багов
+
+Сбой, найденный `Epoch.Fuzz` с `FailureStore()`, хранится в `epochsim-failures.json` (см. [Fuzzing](fuzzing.md#хранилище-сбоев)). Две проверки превращают его в тест.
+
+`SimAssert.Regression` перепроигрывает один seed. Это тонкая обёртка над `Epoch.Fuzz`: она применяет `configure`, затем ограничивает прогон `Seeds(seed, seed)` и `Ticks(ticks)`, отключает шринкинг и хранилище сбоев и применяет `OnlyCommands(commandIndices)`, если индексы заданы. Нужные значения есть в строке `Repro:` отчёта, а `epochsim failures export-test` генерирует вызовы за вас:
+
+```text
+SimAssert.Regression<Inventory>(InventoryFuzz.Configure, 18, 19);
+SimAssert.Regression<AccountState>(AccountFuzz.Configure, 1, 500, [4, 5]);
+```
+
+`SimAssert.StoredFailuresStayFixed` это один тест, который перепроигрывает всё, что хранилище содержит для набора, названного в `configure` (`Name(...)`): записанный сценарий каждой записи и остальные seed из неё. Он только читает хранилище и ничего не помечает исправленным, поэтому безопасен в CI:
+
+```text
+SimAssert.StoredFailuresStayFixed<Inventory>(InventoryFuzz.Configure, "epochsim-failures.json");
+```
+
+Если файла хранилища нет или у набора нет записей, тест проходит. Если seed всё ещё падает, исключение содержит тот же текст отчёта, что и любая другая упавшая проверка.

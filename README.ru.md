@@ -70,31 +70,55 @@ public sealed class WorldState
 
 ## Поиск багов по seed
 
-`Epoch.Fuzz` прогоняет симуляцию на диапазоне seed и проверяет инварианты, исключения и, по желанию, детерминизм. Каждый сбой приходит с seed, который его воспроизводит, и полями состояния, изменившимися на сбойном тике.
+`Epoch.Fuzz` прогоняет ваш код на диапазоне seed и проверяет инварианты, исключения и, по желанию, детерминизм. Переписывать существующий код не нужно: вызовите его из `Step`, опишите в `Invariant`, что должно выполняться всегда, и задайте seed. `ctx.Rng.AsRandom()` отдаёт коду, принимающему `System.Random`, детерминированный поток.
 
+<!-- snippet: throws FuzzFailedException -->
 ```csharp
-var report = Epoch.Fuzz<JobQueueState>(f => f
-    .State(() => new JobQueueState())
-    .Engine(e => e.AddSystem(new JobQueueSystem()))
-    .Invariants(() => [new QueueNonNegativeInvariant()])
+using EpochSim;
+
+var report = Epoch.Fuzz<Inventory>(f => f
+    .State(() => new Inventory())
+    .Step((inventory, ctx) => inventory.Tick(ctx.Rng.AsRandom()))
+    .Invariant("StockNonNegative", inventory => inventory.Stock >= 0)
     .Seeds(1, 1000)
     .Ticks(500));
 
 report.ThrowIfFailed();
+
+public sealed class Inventory
+{
+    public int Stock { get; private set; } = 5;
+
+    public void Tick(Random random)
+    {
+        if (random.Next(0, 3) == 0)
+            Stock += 4;
+
+        var demand = random.Next(0, 3);
+        if (Stock >= demand)
+            Stock -= demand;
+
+        if (random.Next(0, 400) == 0)
+            Stock -= 5;
+    }
+}
 ```
 
-```
-Fuzz failed: Failures=14, SeedsRun=1000, ElapsedMs=81
+`Inventory` это обычный класс без ссылок на EpochSim. Прогон находит seed, на которых остаток уходит в минус, и называет тик и изменившиеся поля состояния:
 
-[InvariantViolation] seed=4 tick=426
-  QueueNonNegative: Pending=-1
+```text
+Fuzz failed: Failures=21, SeedsRun=1000, ElapsedMs=150
+
+[InvariantViolation] seed=18 tick=19
+  StockNonNegative: predicate returned false
   StateDiff:
-    $.Completed: 198 -> 200
-    $.Pending: 0 -> -1
-  Repro: .Seeds(4, 4).Ticks(426)
+    $.Stock: 1 -> -2
+  Repro: .Seeds(18, 18).Ticks(19)
+
+...
 ```
 
-Добавьте `.CheckDeterminism()`, чтобы прогонять каждый seed дважды и ловить `static`-состояние, системное время и другие источники недетерминизма. Тот же прогон из терминала:
+Добавьте `.Seeds(18, 18).Ticks(19)` из строки `Repro` в свой вызов, чтобы прогнать только этот сбой. Если симуляцию ведут команды, сбои при `Commands(...)` сокращаются до минимального сценария, `FailureStore()` хранит сбойные seed в файле, который вы коммитите, а `epochsim failures export-test` превращает их в регрессионные тесты. `.CheckDeterminism()` прогоняет каждый seed дважды и ловит `static`-состояние, системное время и другие источники недетерминизма. Тот же поиск из терминала:
 
 ```bash
 epochsim fuzz --adapter fuzzbug --seeds 1..1000 --ticks 500
@@ -111,11 +135,18 @@ dotnet add package EpochSim.Testing
 ```
 
 ```csharp
+using EpochSim.Testing;
+
 SimAssert.IsDeterministic<WorldState>(f => f
     .State(() => new WorldState())
-    .Engine(e => e.AddSystem("World", tick: ctx => ctx.State.Population++))
+    .Step((world, _) => world.Population++)
     .Seeds(1, 50)
     .Ticks(200));
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Сообщение о сбое называет seed, тик и изменившиеся поля состояния. Подробнее в [Testing](docs/ru/testing.md).
@@ -128,48 +159,70 @@ SimAssert.IsDeterministic<WorldState>(f => f
 | `RecommendedRun` | каждые 50 тиков      | Нет            | Диагностика в production          |
 | `DebugRun`       | каждый тик           | Да             | Поиск инвариантов, строгий режим  |
 
-Mutation guard сериализует state до и после каждой системы и бросает `InvalidOperationException`, если fingerprint изменился. Он находит системы, меняющие state вне обработчиков событий, но заметно замедляет прогон: используйте его только в `DebugRun`.
-
 ```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
 using var quick = Epoch.QuickRun(state, rootDir: "artifacts");
 quick.RunTicks(engine, seed: 1, endTickInclusive: 100);
 
 using var recommended = Epoch.RecommendedRun(state, rootDir: "artifacts");
 recommended.RunTicks(engine, seed: 1, endTickInclusive: 1000);
 
-var serializer = Epoch.JsonStateSerializer<WorldState>();
-using var debug = Epoch.DebugRun(state, serializer, rootDir: "artifacts");
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
+```
+
+Mutation guard сериализует state до и после каждой системы и бросает `InvalidOperationException`, если fingerprint изменился. Он находит системы, меняющие state вне обработчиков событий, но заметно замедляет прогон: используйте его только в `DebugRun`. Система выше меняет `Population` напрямую, поэтому `DebugRun` отклоняет её, называя тик и систему:
+
+<!-- snippet: throws InvalidOperationException -->
+```csharp
+using EpochSim;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.AddSystem("World", tick: ctx => ctx.State.Population++);
+
+using var debug = Epoch.DebugRun(state, rootDir: "artifacts");
 debug.RunTicks(engine, seed: 1, endTickInclusive: 200);
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Для полного контроля: `Epoch.RecommendedRun(state, codec, serializer, rootDir, invariants)` или `EpochSimRun.For(state)...Build()`.
 
-## Лог событий и replay
+## Лог событий и артефакты
 
-Лог событий необязателен и нужен для `verify-run`, `bisect` и `fast-replay`.
-
-```csharp
-using EpochSim;
-using EpochSim.Kernel.Messaging;
-
-var codec = Epoch.JsonCodecFromAssembly<Program>(t => t == typeof(Changed));
-var serializer = Epoch.JsonStateSerializer<WorldState>();
-
-using var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts");
-
-[MessageKind("Changed")]
-public sealed record Changed(int Delta) : IEvent;
-```
-
-## Чтение артефактов
-
-Артефакты лежат обычными файлами в каталоге прогона и читаются из кода:
+Лог событий необязателен и нужен для `verify-run`, `bisect` и `fast-replay`. Артефакты лежат обычными файлами в каталоге прогона и читаются из кода:
 
 ```csharp
 using EpochSim;
 using EpochSim.Execution.RunArtifacts;
 using EpochSim.Execution.StateFingerprint;
+using EpochSim.Kernel.Messaging;
 using EpochSim.Serialization.EventLog;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+var inbox = new ScheduledCommandInbox();
+engine.AttachScheduledInbox(inbox);
+engine.OnCommand<AddPopulation>((world, command, events) =>
+{
+    world.Population += command.Delta;
+    events.Emit(new Changed(command.Delta));
+});
+inbox.Enqueue(5, new AddPopulation(3));
+
+var codec = Epoch.JsonCodecFromAssembly<Program>(type => type == typeof(Changed));
+var serializer = Epoch.JsonStateSerializer<WorldState>();
 
 string runDir;
 using (var run = Epoch.RecommendedRun(state, codec, serializer, rootDir: "artifacts"))
@@ -183,6 +236,17 @@ var fingerprints = JsonlStateFingerprintWriter.ReadAll(Path.Combine(runDir, "sta
 var entries = EventLogReader.ReadAll(Path.Combine(runDir, "events.jsonl"));
 
 Console.WriteLine($"EndTick={manifest?.EndTick}, fingerprints={fingerprints.Count}, events={entries.Count}");
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+[MessageKind("Changed")]
+public sealed record Changed(int Delta) : IEvent;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Структура и форматы описаны в [Artifacts](docs/ru/artifacts.md).
@@ -192,6 +256,13 @@ Console.WriteLine($"EndTick={manifest?.EndTick}, fingerprints={fingerprints.Coun
 `RunTicks` подходит для batch-прогонов. `SimulationSession<TState>` подходит для долгоживущих циклов:
 
 ```csharp
+using EpochSim;
+using EpochSim.Kernel.Messaging;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.OnCommand<AddPopulation>((world, command, _) => world.Population += command.Delta);
+
 var inbox = new CommandInbox();
 engine.AttachInbox(inbox);
 
@@ -202,6 +273,11 @@ session.RunUntil(100);
 
 [MessageKind("AddPopulation")]
 public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Inbox'ы детерминированно передают внешние команды в поток симуляции:
@@ -210,12 +286,30 @@ Inbox'ы детерминированно передают внешние ком
 - `ScheduledCommandInbox`: команды на заданный тик, порядок: сначала тик по возрастанию, затем порядок добавления.
 
 ```csharp
+using EpochSim;
+using EpochSim.Kernel.Messaging;
+
+var state = new WorldState();
+var engine = Epoch.CreateEngine<WorldState>();
+engine.OnCommand<AddPopulation>((world, command, _) => world.Population += command.Delta);
+
 var scheduled = new ScheduledCommandInbox();
 engine.AttachScheduledInbox(scheduled);
 
 scheduled.Enqueue(10, new AddPopulation(3));
 scheduled.Enqueue(10, new AddPopulation(7));
 scheduled.Enqueue(12, new AddPopulation(1));
+
+using var session = engine.CreateSession(state, seed: 1, startTick: 0);
+session.RunUntil(100);
+
+[MessageKind("AddPopulation")]
+public sealed record AddPopulation(int Delta) : ICommand;
+
+public sealed class WorldState
+{
+    public int Population { get; set; }
+}
 ```
 
 Подробнее в [Sessions](docs/ru/sessions.md).
@@ -235,6 +329,7 @@ epochsim inspect-run artifacts <runId>
 epochsim verify-run artifacts <runId>
 epochsim bisect artifacts <runId>
 epochsim fuzz --adapter fuzzbug --seeds 1..1000
+epochsim failures list
 ```
 
 | Команда                                      | Назначение                                      |
@@ -243,7 +338,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | `list-runs`, `inspect-run`, `pretty-inspect` | Просмотр и инспекция записанных прогонов        |
 | `validate-run`, `verify-run`                 | Проверка артефактов и fingerprint'ов            |
 | `fast-replay`, `bisect`, `repro`             | Replay прогона, поиск первого нарушения         |
-| `fuzz`                                       | Прогон многих seed, поиск сбойного              |
+| `fuzz`, `failures`                           | Поиск сбойного seed, сохранённые сбои           |
 | `event-stats`, `timeline`, `list-adapters`   | Анализ событий и список доступных адаптеров     |
 
 ## Состав
@@ -258,7 +353,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 | Диагностика   | Mutation guard, инварианты, проверка replay, bisect, полевой дифф состояния.   |
 | Анализатор    | Roslyn-правила ESIM001-ESIM006 ловят системное время, `Random`, потоки и другое в коде симуляции. |
 | Тестирование  | `EpochSim.Testing`: `SimAssert` для любого тестового фреймворка, золотые fingerprint'ы. |
-| Fuzzing       | `Epoch.Fuzz`: диапазоны seed, инварианты, проверка детерминизма, воспроизводимые сбои. |
+| Fuzzing       | `Epoch.Fuzz`: диапазоны seed, инварианты, проверка детерминизма, шринкинг, хранилище сбоев, регрессионные тесты. |
 | CLI           | .NET-утилита `epochsim` для всего жизненного цикла прогона.                    |
 
 ## Документация
@@ -274,7 +369,7 @@ epochsim fuzz --adapter fuzzbug --seeds 1..1000
 
 ## Примеры
 
-[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) — минимальная отправная точка. [Population](src/EpochSim.Samples/Population/) — событийный домен с инвариантами и replay. [Fuzzing](src/EpochSim.Samples/Fuzzing/) — редкий баг, зависящий от seed, для поиска через `Epoch.Fuzz`.
+[QuickstartSample](src/EpochSim.Samples/Quickstart/QuickstartSample.cs) — минимальная отправная точка. [Population](src/EpochSim.Samples/Population/) — событийный домен с инвариантами и replay. [Onboarding](src/EpochSim.Samples/Onboarding/) — класс `Inventory` из примера поиска багов. [Fuzzing](src/EpochSim.Samples/Fuzzing/) — редкие баги, зависящие от seed и от команд, для поиска через `Epoch.Fuzz`.
 
 ## Сборка и тесты
 
